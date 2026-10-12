@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}{{ component['code'] }}{% endblock %}
+{% block content %}
+{% set label, tone = stock_status(component) %}
+<div class="page-heading">
+  <div><p class="eyebrow">{{ component['category'] }}</p><h1>{{ component['code'] }} <span class="badge {{ tone }}">{{ label }}</span></h1><p>{{ component['description'] }}</p></div>
+  <div class="actions"><a class="button" href="{{ url_for('movement_new', componente=component['id']) }}">Registra movimento</a>{% if g.user['role'] == 'admin' %}<a class="button secondary" href="{{ url_for('component_edit', component_id=component['id']) }}">Modifica</a>{% endif %}</div>
+</div>
+<section class="detail-grid">
+  <div class="quantity-card"><span>Giacenza attuale</span><strong>{{ component['quantity'] }}</strong><small>pezzi disponibili</small></div>
+  <dl class="facts">
+    <div><dt>Soglia di riordino</dt><dd>{{ component['reorder_threshold'] }}</dd></div>
+    <div><dt>Quantità obiettivo</dt><dd>{{ component['target_quantity'] or 'Da definire' }}</dd></div>
+    <div><dt>Valore</dt><dd>{{ component['value'] or '—' }}</dd></div>
+    <div><dt>Laboratorio</dt><dd>{{ component['laboratory'] or '—' }}</dd></div>
+    <div><dt>Armadio / anta</dt><dd>{{ component['cabinet'] or '—' }} / {{ component['door'] or '—' }}</dd></div>
+    <div><dt>Scaffale / cassetto</dt><dd>{{ component['shelf'] or '—' }} / {{ component['drawer'] or '—' }}</dd></div>
+  </dl>
+</section>
+<section class="panel">
+  <div class="panel-heading"><h2>Storico del componente</h2><span>Immutabile</span></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Data</th><th>Operazione</th><th>Variazione</th><th>Giacenza</th><th>Prelevato da / destinatario</th><th>Registrato da</th><th>Note</th></tr></thead>
+    <tbody>{% for movement in movements %}<tr><td>{{ movement['created_at'] }}</td><td>{{ movement['movement_type']|replace('_', ' ')|title }}</td><td class="number {{ 'text-danger' if movement['delta'] < 0 else 'text-success' }}">{{ '%+d'|format(movement['delta']) }}</td><td class="number">{{ movement['balance_after'] }}</td><td>{{ movement['recipient'] or '—' }}</td><td>{{ movement['operator_name'] }}</td><td>{{ movement['note'] or '—' }}</td></tr>{% else %}<tr><td colspan="7" class="empty">Nessun movimento registrato.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

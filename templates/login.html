@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}Accesso{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <p class="eyebrow">Area riservata</p>
+  <h1>Accedi al magazzino</h1>
+  <p>Usa il tuo account personale per registrare ogni operazione.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Nome utente<input name="username" autocomplete="username" required autofocus></label>
+    <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+    <button type="submit">Accedi</button>
+  </form>
+</section>
+{% endblock %}

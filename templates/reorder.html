@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Distinta riordino{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Approvvigionamento</p><h1>Distinta materiali da ordinare</h1><p>Include gli articoli alla soglia e calcola quanto serve per tornare alla quantità obiettivo.</p></div><div class="actions"><a class="button" href="{{ url_for('reorder_excel') }}">Esporta Excel</a><a class="button secondary" href="{{ url_for('reorder_pdf') }}">Esporta PDF</a></div></div>
+<section class="panel">
+  <div class="panel-heading"><h2>{{ items|length }} articoli da ordinare</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Codice</th><th>Componente</th><th>Giacenza</th><th>Soglia</th><th>Obiettivo</th><th>Quantità da ordinare</th></tr></thead>
+    <tbody>{% for item in items %}<tr><td><a href="{{ url_for('component_detail', component_id=item['id']) }}"><strong>{{ item['code'] }}</strong></a></td><td>{{ item['description'] }}<small class="table-sub">{{ item['category'] }}</small></td><td class="number">{{ item['quantity'] }}</td><td class="number">{{ item['reorder_threshold'] }}</td><td class="number">{{ item['target_quantity'] }}</td><td class="number order-quantity">{{ item['to_order'] }}</td></tr>{% else %}<tr><td colspan="6" class="empty">Nessun materiale con obiettivo configurato deve essere ordinato.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+<section class="panel">
+  <div class="panel-heading"><h2>{{ approaching|length }} articoli vicini alla soglia</h2><span>Avviso preventivo</span></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Codice</th><th>Componente</th><th>Giacenza</th><th>Soglia</th><th>Margine residuo</th><th>Obiettivo</th></tr></thead>
+    <tbody>{% for item in approaching %}<tr><td><a href="{{ url_for('component_detail', component_id=item['id']) }}"><strong>{{ item['code'] }}</strong></a></td><td>{{ item['description'] }}<small class="table-sub">{{ item['category'] }}</small></td><td class="number">{{ item['quantity'] }}</td><td class="number">{{ item['reorder_threshold'] }}</td><td class="number text-warning">{{ item['units_to_threshold'] }}</td><td class="number">{{ item['target_quantity'] }}</td></tr>{% else %}<tr><td colspan="6" class="empty">Nessun componente è vicino alla soglia.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

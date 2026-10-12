@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}Utenti{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Amministrazione</p><h1>Utenti</h1><p>Ogni operatore usa un account personale.</p></div></div>
+<div class="two-column users-layout">
+  <section class="panel"><h2>Nuovo utente</h2><form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Nome e cognome<input name="full_name" required></label>
+    <label>Nome utente<input name="username" autocomplete="off" required></label>
+    <label>Password iniziale<input type="password" name="password" minlength="8" autocomplete="new-password" required></label>
+    <label>Ruolo<select name="role"><option value="operatore">Operatore</option><option value="admin">Amministratore</option></select></label>
+    <button type="submit">Crea utente</button>
+  </form></section>
+  <section class="panel"><h2>Account configurati</h2><div class="user-list">{% for user in users %}<div class="user-row"><div><strong>{{ user['full_name'] }}</strong><small>{{ user['username'] }} · {{ user['role'] }}</small></div><span class="badge {{ 'success' if user['active'] else 'neutral' }}">{{ 'Attivo' if user['active'] else 'Disattivato' }}</span>{% if user['id'] != g.user['id'] %}<form method="post" action="{{ url_for('user_toggle', user_id=user['id']) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button secondary small" type="submit">{{ 'Disattiva' if user['active'] else 'Riattiva' }}</button></form>{% endif %}</div>{% endfor %}</div></section>
+</div>
+{% endblock %}

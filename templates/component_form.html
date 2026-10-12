@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Modifica {{ component['code'] }}{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Configurazione componente</p><h1>{{ component['code'] }}</h1></div></div>
+<form method="post" class="panel form-grid">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label class="wide">Descrizione<input name="description" value="{{ component['description'] }}" required></label>
+  <label>Categoria<input name="category" value="{{ component['category'] }}"></label>
+  <label>Valore<input name="value" value="{{ component['value'] }}"></label>
+  <label>Laboratorio<input name="laboratory" value="{{ component['laboratory'] }}"></label>
+  <label>Armadio<input name="cabinet" value="{{ component['cabinet'] }}"></label>
+  <label>Anta<input name="door" value="{{ component['door'] }}"></label>
+  <label>Scaffale<input name="shelf" value="{{ component['shelf'] }}"></label>
+  <label>Cassetto<input name="drawer" value="{{ component['drawer'] }}"></label>
+  <label>Soglia di riordino<input type="number" min="0" name="reorder_threshold" value="{{ component['reorder_threshold'] }}" required><small>Quando la giacenza raggiunge questo valore, l’articolo entra nella distinta.</small></label>
+  <label>Quantità obiettivo<input type="number" min="0" name="target_quantity" value="{{ component['target_quantity'] }}" required><small>Quantità da ristabilire con il nuovo ordine.</small></label>
+  <div class="form-actions wide"><button type="submit">Salva modifiche</button><a class="button secondary" href="{{ url_for('component_detail', component_id=component['id']) }}">Annulla</a></div>
+</form>
+{% endblock %}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Magazzino Elettronica{% endblock %} · ITIS Cannizzaro</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('dashboard') if g.user else url_for('login') }}">
+      <span class="brand-mark">IC</span>
+      <span><strong>Magazzino Elettronica</strong><small>ITIS Cannizzaro · Colleferro</small></span>
+    </a>
+    {% if g.user %}
+      <nav>
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('components') }}">Componenti</a>
+        <a href="{{ url_for('movement_new') }}">Registra movimento</a>
+        <a href="{{ url_for('movements') }}">Storico</a>
+        <a href="{{ url_for('reorder_report') }}">Riordino</a>
+        {% if g.user['role'] == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a>{% endif %}
+      </nav>
+      <div class="user-menu">
+        <span>{{ g.user['full_name'] }}</span>
+        <form method="post" action="{{ url_for('logout') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="link-button" type="submit">Esci</button>
+        </form>
+      </div>
+    {% endif %}
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

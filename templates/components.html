@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Componenti{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Inventario</p><h1>Componenti</h1></div><a class="button" href="{{ url_for('movement_new') }}">+ Movimento</a></div>
+<form method="get" class="filters">
+  <input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Codice, descrizione o valore">
+  <select name="categoria"><option value="">Tutte le categorie</option>{% for row in categories %}<option value="{{ row['category'] }}" {% if request.args.get('categoria') == row['category'] %}selected{% endif %}>{{ row['category'] }}</option>{% endfor %}</select>
+  <select name="stato">
+    <option value="">Tutti gli stati</option>
+    <option value="esaurito" {% if request.args.get('stato') == 'esaurito' %}selected{% endif %}>Esauriti</option>
+    <option value="riordino" {% if request.args.get('stato') == 'riordino' %}selected{% endif %}>Da riordinare</option>
+    <option value="vicino" {% if request.args.get('stato') == 'vicino' %}selected{% endif %}>Vicini alla soglia</option>
+    <option value="obiettivo" {% if request.args.get('stato') == 'obiettivo' %}selected{% endif %}>Obiettivo da definire</option>
+  </select>
+  <button type="submit">Filtra</button><a class="button secondary" href="{{ url_for('components') }}">Azzera</a>
+</form>
+<section class="panel">
+  <div class="table-wrap"><table>
+    <thead><tr><th>Codice</th><th>Componente</th><th>Posizione</th><th>Giacenza</th><th>Soglia</th><th>Obiettivo</th><th>Stato</th></tr></thead>
+    <tbody>{% for item in components %}{% set label, tone = stock_status(item) %}
+      <tr>
+        <td><a href="{{ url_for('component_detail', component_id=item['id']) }}"><strong>{{ item['code'] }}</strong></a></td>
+        <td><strong>{{ item['description'] }}</strong><small class="table-sub">{{ item['category'] }}{% if item['value'] %} · {{ item['value'] }}{% endif %}</small></td>
+        <td>{{ item['laboratory'] }}<small class="table-sub">{{ item['cabinet'] }} · {{ item['door'] }} · {{ item['shelf'] }} · {{ item['drawer'] }}</small></td>
+        <td class="number strong">{{ item['quantity'] }}</td><td class="number">{{ item['reorder_threshold'] }}</td><td class="number">{{ item['target_quantity'] or '—' }}</td>
+        <td><span class="badge {{ tone }}">{{ label }}</span></td>
+      </tr>
+    {% else %}<tr><td colspan="7" class="empty">Nessun componente trovato.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

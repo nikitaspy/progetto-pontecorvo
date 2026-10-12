@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><p class="eyebrow">Situazione aggiornata</p><h1>Dashboard magazzino</h1></div>
+  <a class="button" href="{{ url_for('movement_new') }}">+ Registra movimento</a>
+</div>
+
+<section class="stats-grid">
+  <a class="stat-card" href="{{ url_for('components') }}"><span>Componenti censiti</span><strong>{{ stats['total'] }}</strong></a>
+  <a class="stat-card danger" href="{{ url_for('components', stato='esaurito') }}"><span>Giacenze a zero</span><strong>{{ stats['exhausted'] or 0 }}</strong></a>
+  <a class="stat-card warning" href="{{ url_for('components', stato='riordino') }}"><span>Sotto soglia</span><strong>{{ stats['below_threshold'] or 0 }}</strong></a>
+  <a class="stat-card approaching" href="{{ url_for('components', stato='vicino') }}"><span>Vicini alla soglia</span><strong>{{ stats['approaching'] or 0 }}</strong></a>
+  <a class="stat-card neutral" href="{{ url_for('components', stato='obiettivo') }}"><span>Obiettivo da definire</span><strong>{{ stats['missing_target'] or 0 }}</strong></a>
+</section>
+
+<div class="two-column">
+  <section class="panel">
+    <div class="panel-heading"><h2>Materiali che richiedono attenzione</h2><a href="{{ url_for('reorder_report') }}">Apri distinta</a></div>
+    {% if attention %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Codice</th><th>Descrizione</th><th>Giacenza</th><th>Stato</th></tr></thead>
+      <tbody>{% for item in attention %}{% set label, tone = stock_status(item) %}
+        <tr><td><a href="{{ url_for('component_detail', component_id=item['id']) }}"><strong>{{ item['code'] }}</strong></a></td><td>{{ item['description'] }}</td><td class="number">{{ item['quantity'] }}</td><td><span class="badge {{ tone }}">{{ label }}</span></td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="empty">Nessun materiale richiede attenzione.</p>{% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-heading"><h2>Ultimi movimenti</h2><a href="{{ url_for('movements') }}">Tutto lo storico</a></div>
+    {% if recent %}<div class="activity-list">
+      {% for movement in recent %}<a href="{{ url_for('component_detail', component_id=movement['component_id']) }}" class="activity">
+        <span class="delta {{ 'negative' if movement['delta'] < 0 else 'positive' }}">{{ '%+d'|format(movement['delta']) }}</span>
+        <span><strong>{{ movement['code'] }}</strong> · {{ movement['description'] }}<small>{{ movement['operator_name'] }} · {{ movement['created_at'] }}</small></span>
+      </a>{% endfor %}
+    </div>{% else %}<p class="empty">Non sono ancora stati registrati movimenti.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}
