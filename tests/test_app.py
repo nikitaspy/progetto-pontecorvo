@@ -115,9 +115,17 @@ class WarehouseTest(unittest.TestCase):
                 VALUES ('TPS0002', 'Componente esaurito', 0, 0, 0)
                 """
             )
+            db.execute(
+                """
+                INSERT INTO components
+                    (code, description, quantity, reorder_threshold, target_quantity)
+                VALUES ('TPS0003', 'Obiettivo ancora da definire', 2, 3, 0)
+                """
+            )
             db.commit()
         response = self.client.get("/riordino")
         self.assertIn(b"TPS0002", response.data)
+        self.assertIn(b"TPS0003", response.data)
         self.assertIn(b"Da definire", response.data)
 
         excel = self.client.get("/riordino.xlsx")

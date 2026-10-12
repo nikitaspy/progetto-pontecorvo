@@ -688,7 +688,7 @@ def get_reorder_items():
                END AS to_order
         FROM components
         WHERE quantity = 0
-           OR (target_quantity > quantity AND quantity <= reorder_threshold)
+           OR (reorder_threshold > 0 AND quantity <= reorder_threshold)
         ORDER BY (target_quantity = 0) DESC, category, code
         """
     ).fetchall()
