@@ -2,6 +2,16 @@
 setlocal
 cd /d "%~dp0"
 
+if not exist "requirements.txt" (
+  echo ERRORE: mancano i file del progetto.
+  echo.
+  echo Probabilmente avvia-windows.bat e' stato aperto direttamente dal file ZIP.
+  echo Chiudi questa finestra, fai clic destro sullo ZIP, scegli "Estrai tutto"
+  echo e avvia nuovamente il file dalla cartella estratta.
+  pause
+  exit /b 1
+)
+
 where py >nul 2>nul
 if errorlevel 1 (
   echo Python non e' installato o non e' disponibile nel PATH.

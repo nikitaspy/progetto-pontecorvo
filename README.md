@@ -17,7 +17,7 @@ Gestionale web per l'inventario dei laboratori di elettronica. Importa automatic
 
 Richiede Python 3.11 o successivo.
 
-Su Windows è possibile fare doppio clic su `avvia-windows.bat`: al primo avvio prepara l'ambiente, installa le dipendenze e apre il browser.
+Su Windows, estrarre prima l'intero archivio ZIP in una cartella. Dalla cartella estratta è possibile fare doppio clic su `avvia-windows.bat`: al primo avvio prepara l'ambiente, installa le dipendenze e apre il browser. Non eseguire il file direttamente dall'anteprima dell'archivio ZIP di Windows.
 
 ```bash
 python -m venv .venv
