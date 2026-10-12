@@ -561,10 +561,12 @@ def register_routes(app: Flask) -> None:
             ["Codice", "Descrizione", "Categoria", "Giacenza", "Soglia", "Obiettivo", "Da ordinare", "Ubicazione"]
         )
         for item in items:
+            target = item["target_quantity"] if item["target_quantity"] > 0 else "DA DEFINIRE"
+            to_order = item["to_order"] if item["to_order"] is not None else "DA DEFINIRE"
             sheet.append(
                 [
                     item["code"], item["description"], item["category"], item["quantity"],
-                    item["reorder_threshold"], item["target_quantity"], item["to_order"],
+                    item["reorder_threshold"], target, to_order,
                     location_text(item),
                 ]
             )
@@ -606,9 +608,11 @@ def register_routes(app: Flask) -> None:
         ]
         data = [["Codice", "Descrizione", "Giac.", "Soglia", "Obiettivo", "Ordine"]]
         for item in items:
+            target = item["target_quantity"] if item["target_quantity"] > 0 else "Da definire"
+            to_order = item["to_order"] if item["to_order"] is not None else "Da definire"
             data.append(
                 [item["code"], Paragraph(item["description"], styles["BodyText"]), item["quantity"],
-                 item["reorder_threshold"], item["target_quantity"], item["to_order"]]
+                 item["reorder_threshold"], target, to_order]
             )
         if not items:
             data.append(["—", "Nessun componente da ordinare", "", "", "", ""])
@@ -677,10 +681,15 @@ def register_routes(app: Flask) -> None:
 def get_reorder_items():
     return get_db().execute(
         """
-        SELECT *, target_quantity - quantity AS to_order
+        SELECT *,
+               CASE
+                   WHEN target_quantity > quantity THEN target_quantity - quantity
+                   ELSE NULL
+               END AS to_order
         FROM components
-        WHERE target_quantity > quantity AND quantity <= reorder_threshold
-        ORDER BY category, code
+        WHERE quantity = 0
+           OR (target_quantity > quantity AND quantity <= reorder_threshold)
+        ORDER BY (target_quantity = 0) DESC, category, code
         """
     ).fetchall()
 

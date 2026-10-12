@@ -33,7 +33,9 @@ Il database viene creato in `instance/magazzino.db`. Per un backup completo è s
 
 L'importazione imposta la quantità obiettivo uguale alla giacenza originale dell'Excel. La soglia iniziale viene letta dalla colonna `SOGLIA ALLARME`, oppure impostata a zero quando è vuota. Gli articoli originariamente esauriti restano con obiettivo zero e sono evidenziati nella dashboard per una configurazione manuale.
 
-Un articolo compare nella distinta quando la giacenza è minore o uguale alla soglia e la quantità obiettivo è superiore alla giacenza. La quantità proposta è:
+Un articolo compare sempre nella distinta quando la giacenza è zero. Compare inoltre quando la giacenza è minore o uguale alla soglia e la quantità obiettivo è superiore alla giacenza. Se un articolo esaurito non ha ancora una quantità obiettivo, la distinta lo segnala come `DA DEFINIRE` senza inventare una quantità d'ordine.
+
+Quando l'obiettivo è configurato, la quantità proposta è:
 
 `quantità obiettivo - giacenza attuale`
 

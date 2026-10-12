@@ -1,8 +1,10 @@
 import sqlite3
 import tempfile
 import unittest
+from io import BytesIO
 from pathlib import Path
 
+from openpyxl import load_workbook
 from werkzeug.security import generate_password_hash
 
 from app import create_app, get_db
@@ -102,6 +104,29 @@ class WarehouseTest(unittest.TestCase):
         response = self.client.get("/riordino")
         self.assertIn("articoli vicini alla soglia".encode(), response.data)
         self.assertIn(b"TPS0001", response.data)
+
+    def test_zero_stock_without_target_appears_in_reorder_report(self):
+        with self.app.app_context():
+            db = get_db()
+            db.execute(
+                """
+                INSERT INTO components
+                    (code, description, quantity, reorder_threshold, target_quantity)
+                VALUES ('TPS0002', 'Componente esaurito', 0, 0, 0)
+                """
+            )
+            db.commit()
+        response = self.client.get("/riordino")
+        self.assertIn(b"TPS0002", response.data)
+        self.assertIn(b"Da definire", response.data)
+
+        excel = self.client.get("/riordino.xlsx")
+        self.assertEqual(excel.status_code, 200)
+        workbook = load_workbook(BytesIO(excel.data), data_only=True)
+        rows = list(workbook["Distinta riordino"].iter_rows(values_only=True))
+        zero_item = next(row for row in rows if row[0] == "TPS0002")
+        self.assertEqual(zero_item[5], "DA DEFINIRE")
+        self.assertEqual(zero_item[6], "DA DEFINIRE")
 
     def test_movement_history_is_immutable_in_database(self):
         self.client.post(
