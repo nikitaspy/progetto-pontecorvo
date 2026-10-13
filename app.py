@@ -26,6 +26,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_EXCEL = BASE_DIR / "DATABASE GLOBALE TPS ELETTRONICA.xlsx"
+APP_VERSION = "1.1.0"
 
 
 SCHEMA = """
@@ -233,6 +234,7 @@ def ensure_csrf():
 
 def inject_helpers() -> dict:
     return {
+        "app_version": APP_VERSION,
         "csrf_token": session.get("csrf_token", ""),
         "stock_status": stock_status,
     }

@@ -10,7 +10,7 @@
   <header class="topbar">
     <a class="brand" href="{{ url_for('dashboard') if g.user else url_for('login') }}">
       <span class="brand-mark">IC</span>
-      <span><strong>Magazzino Elettronica</strong><small>ITIS Cannizzaro · Colleferro</small></span>
+      <span><strong>Magazzino Elettronica</strong><small>ITIS Cannizzaro · Colleferro · v{{ app_version }}</small></span>
     </a>
     {% if g.user %}
       <nav>
