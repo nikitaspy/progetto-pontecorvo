@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}Modulo riordino{% endblock %}
+{% block content %}
+<div class="page-heading screen-only">
+  <div><p class="eyebrow">Documento d’ordine</p><h1>Modulo riordino</h1><p>Contiene esclusivamente i componenti con quantità desiderata già confermata.</p></div>
+  <div class="actions">
+    <a class="button secondary" href="{{ url_for('reorder_report') }}">← Distinta da completare</a>
+    <button type="button" onclick="window.print()">Stampa</button>
+    <a class="button secondary" href="{{ url_for('order_form_excel') }}">Excel</a>
+    <a class="button secondary" href="{{ url_for('order_form_pdf') }}">PDF</a>
+  </div>
+</div>
+
+<section class="panel order-document">
+  <div class="print-document-header">
+    <div><p class="eyebrow">ITIS Cannizzaro · Colleferro</p><h1>Modulo di riordino materiali</h1></div>
+    <dl class="document-meta">
+      <div><dt>Data</dt><dd>{{ generated_at.strftime('%d/%m/%Y') }}</dd></div>
+      <div><dt>Compilato da</dt><dd>{{ g.user['full_name'] }}</dd></div>
+      <div><dt>Righe</dt><dd>{{ items|length }}</dd></div>
+      <div><dt>Pezzi totali</dt><dd>{{ total_pieces }}</dd></div>
+    </dl>
+  </div>
+
+  <div class="table-wrap"><table class="order-table">
+    <thead><tr><th>Codice</th><th>Componente</th><th>Categoria</th><th>Ubicazione</th><th>Giacenza</th><th>Quantità desiderata</th>{% if g.user['role'] == 'admin' %}<th class="screen-only">Azioni</th>{% endif %}</tr></thead>
+    <tbody>{% for item in items %}<tr>
+      <td><strong>{{ item['code'] }}</strong></td>
+      <td>{{ item['description'] }}</td>
+      <td>{{ item['category'] or '—' }}</td>
+      <td>{{ location_text(item) or '—' }}</td>
+      <td class="number">{{ item['quantity'] }}</td>
+      <td class="number order-quantity">
+        {% if g.user['role'] == 'admin' %}
+        <form class="individual-order-control screen-edit" method="post" action="{{ url_for('order_form_quantity', component_id=item['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="number" name="desired_quantity" min="1" step="1" value="{{ item['desired_quantity'] }}" aria-label="Quantità desiderata per {{ item['code'] }}" required>
+          <button class="button secondary small" type="submit">Salva</button>
+        </form>
+        <span class="print-only">{{ item['desired_quantity'] }}</span>
+        {% else %}{{ item['desired_quantity'] }}{% endif %}
+      </td>
+      {% if g.user['role'] == 'admin' %}<td class="screen-only"><form method="post" action="{{ url_for('order_form_remove', component_id=item['id']) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button secondary small" type="submit">Rimetti in distinta</button></form></td>{% endif %}
+    </tr>{% else %}<tr><td colspan="{{ 7 if g.user['role'] == 'admin' else 6 }}" class="empty">Il modulo è vuoto. Imposta le quantità dalla distinta da completare.</td></tr>{% endfor %}</tbody>
+    {% if items %}<tfoot><tr><th colspan="5">Totale pezzi</th><th class="number">{{ total_pieces }}</th>{% if g.user['role'] == 'admin' %}<th class="screen-only"></th>{% endif %}</tr></tfoot>{% endif %}
+  </table></div>
+
+  <div class="document-signatures">
+    <div><span>Note</span></div><div><span>Firma responsabile</span></div>
+  </div>
+</section>
+{% endblock %}

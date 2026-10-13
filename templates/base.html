@@ -18,7 +18,8 @@
         <a href="{{ url_for('components') }}">Componenti</a>
         <a href="{{ url_for('movement_new') }}">Registra movimento</a>
         <a href="{{ url_for('movements') }}">Storico</a>
-        <a href="{{ url_for('reorder_report') }}">Riordino</a>
+        <a href="{{ url_for('reorder_report') }}">Distinta</a>
+        <a href="{{ url_for('order_form') }}">Modulo riordino</a>
         {% if g.user['role'] == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a>{% endif %}
       </nav>
       <div class="user-menu">

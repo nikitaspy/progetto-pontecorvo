@@ -103,6 +103,19 @@ tbody tr:hover { background: #f8fafc; }
 .bulk-order-control input { width: 115px; }
 .individual-order-control { display: flex; justify-content: flex-end; gap: 6px; min-width: 145px; }
 .individual-order-control input { width: 76px; padding: 7px 8px; text-align: right; }
+.print-only { display: none; }
+.print-document-header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin-bottom: 22px; }
+.print-document-header h1 { font-size: 1.85rem; }
+.document-meta { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.document-meta div { padding: 9px 13px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.document-meta div:nth-child(2n) { border-right: 0; }
+.document-meta div:nth-last-child(-n+2) { border-bottom: 0; }
+.document-meta dt { color: var(--muted); font-size: .7rem; text-transform: uppercase; }
+.document-meta dd { margin: 3px 0 0; font-weight: 750; }
+.order-table tfoot th { border-top: 2px solid var(--navy); padding: 12px 9px; }
+.document-signatures { display: grid; grid-template-columns: 2fr 1fr; gap: 35px; margin-top: 35px; }
+.document-signatures div { min-height: 75px; border-bottom: 1px solid #7c8793; }
+.document-signatures span { color: var(--muted); font-size: .75rem; text-transform: uppercase; }
 .empty { color: var(--muted); text-align: center; padding: 28px !important; }
 .text-danger { color: var(--danger); font-weight: 750; }
 .text-success { color: var(--success); font-weight: 750; }
@@ -180,4 +193,23 @@ label small { color: var(--muted); font-weight: 400; line-height: 1.35; }
   .bulk-order-control { width: 100%; flex-wrap: wrap; }
   .bulk-order-control label { width: 100%; }
   .bulk-order-control input { flex: 1; min-width: 100px; }
+  .print-document-header { flex-direction: column; }
+  .document-meta { width: 100%; }
+}
+
+@media print {
+  @page { size: A4 landscape; margin: 12mm; }
+  :root, body { background: white; color: #000; }
+  .topbar, .screen-only, .screen-edit, .flash { display: none !important; }
+  .print-only { display: inline !important; }
+  .container { width: 100%; margin: 0; }
+  .order-document { border: 0; box-shadow: none; padding: 0; margin: 0; }
+  .print-document-header { flex-direction: row; }
+  .document-meta { min-width: 390px; }
+  .table-wrap { overflow: visible; }
+  .order-table { font-size: 8pt; }
+  .order-table tr { break-inside: avoid; }
+  .order-table th, .order-table td { padding: 6px; }
+  .order-table a { color: #000; text-decoration: none; }
+  .document-signatures { break-inside: avoid; }
 }

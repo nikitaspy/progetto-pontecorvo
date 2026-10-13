@@ -1,13 +1,13 @@
 {% extends 'base.html' %}
-{% block title %}Distinta riordino{% endblock %}
+{% block title %}Distinta da completare{% endblock %}
 {% block content %}
-<div class="page-heading"><div><p class="eyebrow">Approvvigionamento</p><h1>Distinta materiali da ordinare</h1><p>Include gli esauriti e gli articoli alla soglia. Quando l’obiettivo è configurato, calcola quanto serve per ripristinarlo.</p></div><div class="actions"><a class="button" href="{{ url_for('reorder_excel') }}">Esporta Excel</a><a class="button secondary" href="{{ url_for('reorder_pdf') }}">Esporta PDF</a></div></div>
+<div class="page-heading"><div><p class="eyebrow">Approvvigionamento</p><h1>Distinta da completare</h1><p>Contiene solo i componenti che richiedono un riordino e non hanno ancora una quantità confermata.</p></div><div class="actions"><a class="button" href="{{ url_for('order_form') }}">Modulo riordino ({{ module_count }})</a><a class="button secondary" href="{{ url_for('reorder_excel') }}">Excel distinta</a><a class="button secondary" href="{{ url_for('reorder_pdf') }}">PDF distinta</a></div></div>
 {% if g.user['role'] == 'admin' %}
 <form method="post" action="{{ url_for('reorder_quantities') }}" id="reorder-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 {% endif %}
 <section class="panel">
-  <div class="panel-heading"><h2>{{ items|length }} articoli esauriti o da ordinare</h2></div>
+  <div class="panel-heading"><h2>{{ items|length }} quantità ancora da impostare</h2><span>Le righe confermate passano nel modulo riordino</span></div>
   {% if g.user['role'] == 'admin' and items %}
   <div class="bulk-toolbar">
     <label class="checkbox-label">
@@ -16,14 +16,14 @@
     </label>
     <span class="selection-count" id="selection-count">0 selezionati</span>
     <div class="bulk-order-control">
-      <label for="bulk-order-quantity">Stessa quantità per i selezionati</label>
+      <label for="bulk-order-quantity">Quantità desiderata uguale per i selezionati</label>
       <input type="number" id="bulk-order-quantity" name="bulk_order_quantity" min="1" step="1" placeholder="Quantità">
-      <button type="submit" name="action" value="bulk">Applica quantità</button>
+      <button type="submit" name="action" value="bulk">Aggiungi al modulo</button>
     </div>
   </div>
   {% endif %}
   <div class="table-wrap"><table>
-    <thead><tr>{% if g.user['role'] == 'admin' %}<th class="selection-column">Sel.</th>{% endif %}<th>Codice</th><th>Componente</th><th>Giacenza</th><th>Soglia</th><th>Obiettivo</th><th>Quantità da ordinare</th></tr></thead>
+    <thead><tr>{% if g.user['role'] == 'admin' %}<th class="selection-column">Sel.</th>{% endif %}<th>Codice</th><th>Componente</th><th>Giacenza</th><th>Soglia</th><th>Obiettivo</th><th>Quantità desiderata</th></tr></thead>
     <tbody>{% for item in items %}<tr>
       {% if g.user['role'] == 'admin' %}<td class="selection-column"><input class="component-checkbox" type="checkbox" name="selected_ids" value="{{ item['id'] }}" aria-label="Seleziona {{ item['code'] }}"></td>{% endif %}
       <td><a href="{{ url_for('component_detail', component_id=item['id']) }}"><strong>{{ item['code'] }}</strong></a></td>
@@ -35,11 +35,11 @@
         {% if g.user['role'] == 'admin' %}
         <div class="individual-order-control">
           <input type="number" name="order_quantity_{{ item['id'] }}" min="1" step="1" value="{{ item['to_order'] if item['to_order'] is not none else '' }}" placeholder="Qtà" aria-label="Quantità da ordinare per {{ item['code'] }}">
-          <button class="button secondary small" type="submit" name="action" value="single:{{ item['id'] }}">Salva</button>
+          <button class="button secondary small" type="submit" name="action" value="single:{{ item['id'] }}">Aggiungi</button>
         </div>
         {% elif item['to_order'] is not none %}{{ item['to_order'] }}{% else %}<span class="badge warning">Da configurare</span>{% endif %}
       </td>
-    </tr>{% else %}<tr><td colspan="{{ 7 if g.user['role'] == 'admin' else 6 }}" class="empty">Nessun materiale deve essere ordinato.</td></tr>{% endfor %}</tbody>
+    </tr>{% else %}<tr><td colspan="{{ 7 if g.user['role'] == 'admin' else 6 }}" class="empty">Tutte le quantità sono state impostate. I componenti selezionati si trovano nel modulo riordino.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 {% if g.user['role'] == 'admin' %}</form>{% endif %}

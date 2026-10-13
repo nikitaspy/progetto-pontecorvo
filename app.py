@@ -7,6 +7,7 @@ import sqlite3
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from flask import (
     Flask,
@@ -26,7 +27,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_EXCEL = BASE_DIR / "DATABASE GLOBALE TPS ELETTRONICA.xlsx"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 
 
 SCHEMA = """
@@ -73,10 +74,24 @@ CREATE TABLE IF NOT EXISTS movements (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS reorder_lines (
+    component_id INTEGER PRIMARY KEY REFERENCES components(id) ON DELETE CASCADE,
+    desired_quantity INTEGER NOT NULL CHECK (desired_quantity > 0),
+    set_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_components_code ON components(code);
 CREATE INDEX IF NOT EXISTS idx_components_category ON components(category);
 CREATE INDEX IF NOT EXISTS idx_movements_component ON movements(component_id);
 CREATE INDEX IF NOT EXISTS idx_movements_created ON movements(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reorder_lines_updated ON reorder_lines(updated_at DESC);
 
 CREATE TRIGGER IF NOT EXISTS movements_no_update
 BEFORE UPDATE ON movements
@@ -146,7 +161,41 @@ def initialize_database() -> None:
         source = Path(current_app_config("EXCEL_SOURCE"))
         if source.exists():
             import_excel(source, db)
+    migrate_reorder_lines(db)
     db.commit()
+
+
+def migrate_reorder_lines(db: sqlite3.Connection) -> None:
+    migration_key = "reorder_lines_migrated_from_targets_v1"
+    migrated = db.execute(
+        "SELECT 1 FROM app_settings WHERE key = ?", (migration_key,)
+    ).fetchone()
+    if migrated is not None:
+        return
+    db.execute(
+        """
+        INSERT OR IGNORE INTO reorder_lines (component_id, desired_quantity)
+        SELECT c.id, c.target_quantity - c.quantity
+        FROM components c
+        WHERE (c.quantity = 0
+               OR (c.reorder_threshold > 0 AND c.quantity <= c.reorder_threshold))
+          AND c.target_quantity > c.quantity
+          AND (
+              NOT EXISTS (
+                  SELECT 1 FROM movements m WHERE m.component_id = c.id
+              )
+              OR c.updated_at > (
+                  SELECT MAX(m.created_at)
+                  FROM movements m
+                  WHERE m.component_id = c.id
+              )
+          )
+        """
+    )
+    db.execute(
+        "INSERT INTO app_settings (key, value) VALUES (?, '1')",
+        (migration_key,),
+    )
 
 
 def clean_cell(value) -> str:
@@ -236,6 +285,7 @@ def inject_helpers() -> dict:
     return {
         "app_version": APP_VERSION,
         "csrf_token": session.get("csrf_token", ""),
+        "location_text": location_text,
         "stock_status": stock_status,
     }
 
@@ -548,8 +598,12 @@ def register_routes(app: Flask) -> None:
     @app.get("/riordino")
     @login_required
     def reorder_report():
+        db = get_db()
         return render_template(
-            "reorder.html", items=get_reorder_items(), approaching=get_approaching_items()
+            "reorder.html",
+            items=get_reorder_items(),
+            approaching=get_approaching_items(),
+            module_count=db.execute("SELECT COUNT(*) FROM reorder_lines").fetchone()[0],
         )
 
     @app.post("/riordino/quantita")
@@ -557,6 +611,7 @@ def register_routes(app: Flask) -> None:
     def reorder_quantities():
         db = get_db()
         action = request.form.get("action", "")
+        destination = "reorder_report"
         try:
             if action == "bulk":
                 raw_ids = request.form.getlist("selected_ids")
@@ -573,20 +628,26 @@ def register_routes(app: Flask) -> None:
                 components_to_update = components_by_ids(db, component_ids)
                 if len(components_to_update) != len(component_ids):
                     raise ValueError("Uno o più componenti non sono più presenti nella distinta")
-                validate_order_targets(components_to_update, order_quantity)
                 db.executemany(
                     """
-                    UPDATE components
-                    SET target_quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
+                    INSERT INTO reorder_lines (component_id, desired_quantity, set_by)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(component_id) DO UPDATE SET
+                        desired_quantity = excluded.desired_quantity,
+                        set_by = excluded.set_by,
+                        updated_at = CURRENT_TIMESTAMP
                     """,
-                    [(order_quantity, component["id"]) for component in components_to_update],
+                    [
+                        (component["id"], order_quantity, g.user["id"])
+                        for component in components_to_update
+                    ],
                 )
                 db.commit()
                 flash(
-                    f"Quantità d’ordine impostata a {order_quantity} per {len(component_ids)} componenti.",
+                    f"Aggiunti al modulo {len(component_ids)} componenti, quantità {order_quantity} ciascuno.",
                     "success",
                 )
+                destination = "order_form"
             elif action.startswith("single:"):
                 try:
                     component_id = int(action.split(":", 1)[1])
@@ -600,27 +661,80 @@ def register_routes(app: Flask) -> None:
                 components_to_update = components_by_ids(db, [component_id])
                 if not components_to_update:
                     raise ValueError("Il componente non è più presente nella distinta")
-                validate_order_targets(components_to_update, order_quantity)
                 component = components_to_update[0]
                 db.execute(
                     """
-                    UPDATE components
-                    SET target_quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
+                    INSERT INTO reorder_lines (component_id, desired_quantity, set_by)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(component_id) DO UPDATE SET
+                        desired_quantity = excluded.desired_quantity,
+                        set_by = excluded.set_by,
+                        updated_at = CURRENT_TIMESTAMP
                     """,
-                    (order_quantity, component_id),
+                    (component_id, order_quantity, g.user["id"]),
                 )
                 db.commit()
                 flash(
-                    f"Quantità d’ordine di {component['code']} impostata a {order_quantity}.",
+                    f"{component['code']} aggiunto al modulo con quantità {order_quantity}.",
                     "success",
                 )
+                destination = "order_form"
             else:
                 raise ValueError("Operazione non valida")
         except ValueError as error:
             db.rollback()
             flash(str(error), "error")
-        return redirect(url_for("reorder_report"))
+        return redirect(url_for(destination))
+
+    @app.get("/modulo-riordino")
+    @login_required
+    def order_form():
+        items = get_order_form_items()
+        return render_template(
+            "order_form.html",
+            items=items,
+            total_pieces=sum(item["desired_quantity"] for item in items),
+            generated_at=datetime.now(),
+        )
+
+    @app.post("/modulo-riordino/<int:component_id>/quantita")
+    @admin_required
+    def order_form_quantity(component_id: int):
+        db = get_db()
+        try:
+            desired_quantity = positive_int(
+                request.form.get("desired_quantity"), "Quantità desiderata"
+            )
+            cursor = db.execute(
+                """
+                UPDATE reorder_lines
+                SET desired_quantity = ?, set_by = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE component_id = ?
+                """,
+                (desired_quantity, g.user["id"], component_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("Riga del modulo non trovata")
+            db.commit()
+            flash("Quantità del modulo aggiornata.", "success")
+        except ValueError as error:
+            db.rollback()
+            flash(str(error), "error")
+        return redirect(url_for("order_form"))
+
+    @app.post("/modulo-riordino/<int:component_id>/rimuovi")
+    @admin_required
+    def order_form_remove(component_id: int):
+        db = get_db()
+        cursor = db.execute(
+            "DELETE FROM reorder_lines WHERE component_id = ?", (component_id,)
+        )
+        db.commit()
+        if cursor.rowcount:
+            flash("Componente rimosso dal modulo e riportato nella distinta.", "success")
+        else:
+            flash("Riga del modulo non trovata.", "error")
+        return redirect(url_for("order_form"))
 
     @app.get("/riordino.xlsx")
     @login_required
@@ -628,9 +742,9 @@ def register_routes(app: Flask) -> None:
         items = get_reorder_items()
         workbook = Workbook()
         sheet = workbook.active
-        sheet.title = "Distinta riordino"
+        sheet.title = "Distinta da completare"
         sheet.append(
-            ["Codice", "Descrizione", "Categoria", "Giacenza", "Soglia", "Obiettivo", "Da ordinare", "Ubicazione"]
+            ["Codice", "Descrizione", "Categoria", "Giacenza", "Soglia", "Obiettivo", "Quantità suggerita", "Ubicazione"]
         )
         for item in items:
             target = item["target_quantity"] if item["target_quantity"] > 0 else "DA DEFINIRE"
@@ -653,7 +767,7 @@ def register_routes(app: Flask) -> None:
         return send_file(
             output,
             as_attachment=True,
-            download_name=f"distinta-riordino-{stamp}.xlsx",
+            download_name=f"distinta-da-completare-{stamp}.xlsx",
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
@@ -674,16 +788,16 @@ def register_routes(app: Flask) -> None:
         )
         styles = getSampleStyleSheet()
         story = [
-            Paragraph("ITIS Cannizzaro Colleferro — Distinta materiali da ordinare", styles["Title"]),
+            Paragraph("ITIS Cannizzaro Colleferro — Distinta da completare", styles["Title"]),
             Paragraph(datetime.now().strftime("Generata il %d/%m/%Y alle %H:%M"), styles["Normal"]),
             Spacer(1, 5 * mm),
         ]
-        data = [["Codice", "Descrizione", "Giac.", "Soglia", "Obiettivo", "Ordine"]]
+        data = [["Codice", "Descrizione", "Giac.", "Soglia", "Obiettivo", "Suggerita"]]
         for item in items:
             target = item["target_quantity"] if item["target_quantity"] > 0 else "Da definire"
             to_order = item["to_order"] if item["to_order"] is not None else "Da definire"
             data.append(
-                [item["code"], Paragraph(item["description"], styles["BodyText"]), item["quantity"],
+                [item["code"], Paragraph(escape(str(item["description"])), styles["BodyText"]), item["quantity"],
                  item["reorder_threshold"], target, to_order]
             )
         if not items:
@@ -707,7 +821,117 @@ def register_routes(app: Flask) -> None:
         doc.build(story)
         output.seek(0)
         stamp = datetime.now().strftime("%Y-%m-%d")
-        return send_file(output, as_attachment=True, download_name=f"distinta-riordino-{stamp}.pdf", mimetype="application/pdf")
+        return send_file(output, as_attachment=True, download_name=f"distinta-da-completare-{stamp}.pdf", mimetype="application/pdf")
+
+    @app.get("/modulo-riordino.xlsx")
+    @login_required
+    def order_form_excel():
+        items = get_order_form_items()
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Modulo riordino"
+        sheet.append(
+            ["Codice", "Descrizione", "Categoria", "Giacenza", "Quantità desiderata", "Ubicazione"]
+        )
+        for item in items:
+            sheet.append(
+                [
+                    item["code"], item["description"], item["category"], item["quantity"],
+                    item["desired_quantity"], location_text(item),
+                ]
+            )
+        for column in sheet.columns:
+            sheet.column_dimensions[column[0].column_letter].width = min(
+                55, max(len(str(cell.value or "")) for cell in column) + 2
+            )
+        output = io.BytesIO()
+        workbook.save(output)
+        output.seek(0)
+        stamp = datetime.now().strftime("%Y-%m-%d")
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=f"modulo-riordino-{stamp}.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    @app.get("/modulo-riordino.pdf")
+    @login_required
+    def order_form_pdf():
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import mm
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+        items = get_order_form_items()
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(
+            output, pagesize=landscape(A4), leftMargin=10 * mm, rightMargin=10 * mm,
+            topMargin=10 * mm, bottomMargin=10 * mm,
+        )
+        styles = getSampleStyleSheet()
+        total_pieces = sum(item["desired_quantity"] for item in items)
+        story = [
+            Paragraph("ITIS Cannizzaro Colleferro — Modulo riordino", styles["Title"]),
+            Paragraph(
+                datetime.now().strftime("Generato il %d/%m/%Y alle %H:%M")
+                + f" — Compilato da: {escape(str(g.user['full_name']))} — Righe: {len(items)}",
+                styles["Normal"],
+            ),
+            Spacer(1, 5 * mm),
+        ]
+        data = [["Codice", "Descrizione", "Categoria", "Giac.", "Quantità desiderata", "Ubicazione"]]
+        for item in items:
+            data.append(
+                [
+                    item["code"], Paragraph(escape(str(item["description"])), styles["BodyText"]),
+                    item["category"], item["quantity"], item["desired_quantity"],
+                    location_text(item),
+                ]
+            )
+        if not items:
+            data.append(["—", "Modulo vuoto", "", "", "", ""])
+        else:
+            data.append(["", "", "", "Totale pezzi", total_pieces, ""])
+        table = Table(
+            data,
+            colWidths=[27 * mm, 100 * mm, 35 * mm, 18 * mm, 35 * mm, 55 * mm],
+            repeatRows=1,
+        )
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#173d6b")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTNAME", (3, -1), (4, -1), "Helvetica-Bold"),
+                    ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#eef3f8")]),
+                    ("ALIGN", (3, 1), (4, -1), "RIGHT"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ]
+            )
+        )
+        story.append(table)
+        story.extend(
+            [
+                Spacer(1, 10 * mm),
+                Paragraph("Note: _________________________________________________________________", styles["Normal"]),
+                Spacer(1, 10 * mm),
+                Paragraph("Firma del responsabile: ______________________________________________", styles["Normal"]),
+            ]
+        )
+        doc.build(story)
+        output.seek(0)
+        stamp = datetime.now().strftime("%Y-%m-%d")
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=f"modulo-riordino-{stamp}.pdf",
+            mimetype="application/pdf",
+        )
 
     @app.route("/utenti", methods=("GET", "POST"))
     @admin_required
@@ -753,15 +977,31 @@ def register_routes(app: Flask) -> None:
 def get_reorder_items():
     return get_db().execute(
         """
-        SELECT *,
+        SELECT c.*,
                CASE
-                   WHEN target_quantity > quantity THEN target_quantity - quantity
+                   WHEN c.target_quantity > c.quantity THEN c.target_quantity - c.quantity
                    ELSE NULL
                END AS to_order
-        FROM components
-        WHERE quantity = 0
-           OR (reorder_threshold > 0 AND quantity <= reorder_threshold)
-        ORDER BY (target_quantity = 0) DESC, category, code
+        FROM components c
+        WHERE (c.quantity = 0
+               OR (c.reorder_threshold > 0 AND c.quantity <= c.reorder_threshold))
+          AND NOT EXISTS (
+              SELECT 1 FROM reorder_lines r WHERE r.component_id = c.id
+          )
+        ORDER BY (c.target_quantity = 0) DESC, c.category, c.code
+        """
+    ).fetchall()
+
+
+def get_order_form_items():
+    return get_db().execute(
+        """
+        SELECT c.*, r.desired_quantity, r.created_at AS order_created_at,
+               r.updated_at AS order_updated_at, u.full_name AS set_by_name
+        FROM reorder_lines r
+        JOIN components c ON c.id = r.component_id
+        LEFT JOIN users u ON u.id = r.set_by
+        ORDER BY c.category, c.code
         """
     ).fetchall()
 
@@ -772,32 +1012,17 @@ def components_by_ids(db: sqlite3.Connection, component_ids: list[int]):
     placeholders = ",".join("?" for _ in component_ids)
     return db.execute(
         f"""
-        SELECT id, code, quantity, reorder_threshold
-        FROM components
-        WHERE id IN ({placeholders})
-          AND (quantity = 0 OR (reorder_threshold > 0 AND quantity <= reorder_threshold))
-        ORDER BY id
+        SELECT c.id, c.code, c.quantity, c.reorder_threshold
+        FROM components c
+        WHERE c.id IN ({placeholders})
+          AND (c.quantity = 0 OR (c.reorder_threshold > 0 AND c.quantity <= c.reorder_threshold))
+          AND NOT EXISTS (
+              SELECT 1 FROM reorder_lines r WHERE r.component_id = c.id
+          )
+        ORDER BY c.id
         """,
         component_ids,
     ).fetchall()
-
-
-def validate_order_targets(components, order_quantity: int) -> None:
-    invalid = [
-        component
-        for component in components
-        if component["quantity"] + order_quantity < component["reorder_threshold"]
-    ]
-    if invalid:
-        examples = ", ".join(component["code"] for component in invalid[:4])
-        minimum = max(
-            component["reorder_threshold"] - component["quantity"] for component in invalid
-        )
-        suffix = "…" if len(invalid) > 4 else ""
-        raise ValueError(
-            f"Quantità insufficiente per superare la soglia di {examples}{suffix}. "
-            f"Per questa selezione ordinare almeno {minimum} pezzi."
-        )
 
 
 def get_approaching_items():
