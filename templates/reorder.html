@@ -2,13 +2,47 @@
 {% block title %}Distinta riordino{% endblock %}
 {% block content %}
 <div class="page-heading"><div><p class="eyebrow">Approvvigionamento</p><h1>Distinta materiali da ordinare</h1><p>Include gli esauriti e gli articoli alla soglia. Quando l’obiettivo è configurato, calcola quanto serve per ripristinarlo.</p></div><div class="actions"><a class="button" href="{{ url_for('reorder_excel') }}">Esporta Excel</a><a class="button secondary" href="{{ url_for('reorder_pdf') }}">Esporta PDF</a></div></div>
+{% if g.user['role'] == 'admin' %}
+<form method="post" action="{{ url_for('reorder_quantities') }}" id="reorder-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+{% endif %}
 <section class="panel">
   <div class="panel-heading"><h2>{{ items|length }} articoli esauriti o da ordinare</h2></div>
+  {% if g.user['role'] == 'admin' and items %}
+  <div class="bulk-toolbar">
+    <label class="checkbox-label">
+      <input type="checkbox" id="select-all-components">
+      <span>Seleziona tutti</span>
+    </label>
+    <span class="selection-count" id="selection-count">0 selezionati</span>
+    <div class="bulk-order-control">
+      <label for="bulk-order-quantity">Stessa quantità per i selezionati</label>
+      <input type="number" id="bulk-order-quantity" name="bulk_order_quantity" min="1" step="1" placeholder="Quantità">
+      <button type="submit" name="action" value="bulk">Applica quantità</button>
+    </div>
+  </div>
+  {% endif %}
   <div class="table-wrap"><table>
-    <thead><tr><th>Codice</th><th>Componente</th><th>Giacenza</th><th>Soglia</th><th>Obiettivo</th><th>Quantità da ordinare</th></tr></thead>
-    <tbody>{% for item in items %}<tr><td><a href="{{ url_for('component_detail', component_id=item['id']) }}"><strong>{{ item['code'] }}</strong></a></td><td>{{ item['description'] }}<small class="table-sub">{{ item['category'] }}</small></td><td class="number"><span class="badge {{ 'danger' if item['quantity'] == 0 else 'warning' }}">{{ item['quantity'] }}</span></td><td class="number">{{ item['reorder_threshold'] }}</td><td class="number">{% if item['target_quantity'] > 0 %}{{ item['target_quantity'] }}{% else %}<span class="badge warning">Da definire</span>{% endif %}</td><td class="number order-quantity">{% if item['to_order'] is not none %}{{ item['to_order'] }}{% elif g.user['role'] == 'admin' %}<a href="{{ url_for('component_edit', component_id=item['id']) }}">Imposta obiettivo</a>{% else %}<span class="badge warning">Da configurare</span>{% endif %}</td></tr>{% else %}<tr><td colspan="6" class="empty">Nessun materiale deve essere ordinato.</td></tr>{% endfor %}</tbody>
+    <thead><tr>{% if g.user['role'] == 'admin' %}<th class="selection-column">Sel.</th>{% endif %}<th>Codice</th><th>Componente</th><th>Giacenza</th><th>Soglia</th><th>Obiettivo</th><th>Quantità da ordinare</th></tr></thead>
+    <tbody>{% for item in items %}<tr>
+      {% if g.user['role'] == 'admin' %}<td class="selection-column"><input class="component-checkbox" type="checkbox" name="selected_ids" value="{{ item['id'] }}" aria-label="Seleziona {{ item['code'] }}"></td>{% endif %}
+      <td><a href="{{ url_for('component_detail', component_id=item['id']) }}"><strong>{{ item['code'] }}</strong></a></td>
+      <td>{{ item['description'] }}<small class="table-sub">{{ item['category'] }}</small></td>
+      <td class="number"><span class="badge {{ 'danger' if item['quantity'] == 0 else 'warning' }}">{{ item['quantity'] }}</span></td>
+      <td class="number">{{ item['reorder_threshold'] }}</td>
+      <td class="number">{% if item['target_quantity'] > 0 %}{{ item['target_quantity'] }}{% else %}<span class="badge warning">Da definire</span>{% endif %}</td>
+      <td class="number order-quantity">
+        {% if g.user['role'] == 'admin' %}
+        <div class="individual-order-control">
+          <input type="number" name="order_quantity_{{ item['id'] }}" min="1" step="1" value="{{ item['to_order'] if item['to_order'] is not none else '' }}" placeholder="Qtà" aria-label="Quantità da ordinare per {{ item['code'] }}">
+          <button class="button secondary small" type="submit" name="action" value="single:{{ item['id'] }}">Salva</button>
+        </div>
+        {% elif item['to_order'] is not none %}{{ item['to_order'] }}{% else %}<span class="badge warning">Da configurare</span>{% endif %}
+      </td>
+    </tr>{% else %}<tr><td colspan="{{ 7 if g.user['role'] == 'admin' else 6 }}" class="empty">Nessun materiale deve essere ordinato.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
+{% if g.user['role'] == 'admin' %}</form>{% endif %}
 <section class="panel">
   <div class="panel-heading"><h2>{{ approaching|length }} articoli vicini alla soglia</h2><span>Avviso preventivo</span></div>
   <div class="table-wrap"><table>
@@ -16,4 +50,7 @@
     <tbody>{% for item in approaching %}<tr><td><a href="{{ url_for('component_detail', component_id=item['id']) }}"><strong>{{ item['code'] }}</strong></a></td><td>{{ item['description'] }}<small class="table-sub">{{ item['category'] }}</small></td><td class="number">{{ item['quantity'] }}</td><td class="number">{{ item['reorder_threshold'] }}</td><td class="number text-warning">{{ item['units_to_threshold'] }}</td><td class="number">{{ item['target_quantity'] }}</td></tr>{% else %}<tr><td colspan="6" class="empty">Nessun componente è vicino alla soglia.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
+{% endblock %}
+{% block scripts %}
+{% if g.user['role'] == 'admin' %}<script src="{{ url_for('static', filename='reorder.js') }}" defer></script>{% endif %}
 {% endblock %}

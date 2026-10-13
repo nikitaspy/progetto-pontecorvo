@@ -89,7 +89,8 @@ class WarehouseTest(unittest.TestCase):
         )
         response = self.client.get("/riordino")
         self.assertIn(b"TPS0001", response.data)
-        self.assertIn(b">7<", response.data)
+        self.assertIn(b'name="order_quantity_1"', response.data)
+        self.assertIn(b'value="7"', response.data)
 
     def test_report_warns_before_reaching_threshold(self):
         self.client.post(
@@ -135,6 +136,96 @@ class WarehouseTest(unittest.TestCase):
         zero_item = next(row for row in rows if row[0] == "TPS0002")
         self.assertEqual(zero_item[5], "DA DEFINIRE")
         self.assertEqual(zero_item[6], "DA DEFINIRE")
+
+    def test_bulk_order_quantity_applies_equally_to_selected_components(self):
+        with self.app.app_context():
+            db = get_db()
+            db.execute(
+                """INSERT INTO components
+                   (code, description, quantity, reorder_threshold, target_quantity)
+                   VALUES ('TPS0002', 'Esaurito', 0, 0, 0)"""
+            )
+            db.execute(
+                """INSERT INTO components
+                   (code, description, quantity, reorder_threshold, target_quantity)
+                   VALUES ('TPS0003', 'Sotto soglia', 2, 3, 5)"""
+            )
+            db.commit()
+
+        response = self.client.post(
+            "/riordino/quantita",
+            data={
+                "action": "bulk",
+                "bulk_order_quantity": "4",
+                "selected_ids": ["2", "3"],
+            },
+            follow_redirects=True,
+        )
+        self.assertIn("per 2 componenti".encode(), response.data)
+        with self.app.app_context():
+            rows = get_db().execute(
+                "SELECT code, quantity, target_quantity FROM components ORDER BY code"
+            ).fetchall()
+            self.assertEqual(rows[0]["target_quantity"], 10)
+            self.assertEqual(rows[1]["target_quantity"] - rows[1]["quantity"], 4)
+            self.assertEqual(rows[2]["target_quantity"] - rows[2]["quantity"], 4)
+
+        excel = self.client.get("/riordino.xlsx")
+        workbook = load_workbook(BytesIO(excel.data), data_only=True)
+        exported = {
+            row[0]: row[6]
+            for row in workbook["Distinta riordino"].iter_rows(min_row=2, values_only=True)
+        }
+        self.assertEqual(exported["TPS0002"], 4)
+        self.assertEqual(exported["TPS0003"], 4)
+
+    def test_individual_order_quantity_and_threshold_validation(self):
+        with self.app.app_context():
+            db = get_db()
+            db.execute(
+                """INSERT INTO components
+                   (code, description, quantity, reorder_threshold, target_quantity)
+                   VALUES ('TPS0002', 'Esaurito', 0, 6, 0)"""
+            )
+            db.commit()
+
+        rejected = self.client.post(
+            "/riordino/quantita",
+            data={"action": "single:2", "order_quantity_2": "5"},
+            follow_redirects=True,
+        )
+        self.assertIn("ordinare almeno 6 pezzi".encode(), rejected.data)
+
+        accepted = self.client.post(
+            "/riordino/quantita",
+            data={"action": "single:2", "order_quantity_2": "8"},
+            follow_redirects=True,
+        )
+        self.assertIn("TPS0002 impostata a 8".encode(), accepted.data)
+        with self.app.app_context():
+            self.assertEqual(
+                get_db().execute(
+                    "SELECT target_quantity FROM components WHERE code = 'TPS0002'"
+                ).fetchone()[0],
+                8,
+            )
+
+    def test_operator_cannot_change_order_quantities(self):
+        with self.app.app_context():
+            db = get_db()
+            cursor = db.execute(
+                "INSERT INTO users (username, full_name, password_hash, role) VALUES (?, ?, ?, ?)",
+                ("operatore", "Operatore Test", generate_password_hash("password-test"), "operatore"),
+            )
+            operator_id = cursor.lastrowid
+            db.commit()
+        with self.client.session_transaction() as session_data:
+            session_data["user_id"] = operator_id
+        response = self.client.post(
+            "/riordino/quantita",
+            data={"action": "single:1", "order_quantity_1": "5"},
+        )
+        self.assertEqual(response.status_code, 403)
 
     def test_movement_history_is_immutable_in_database(self):
         self.client.post(

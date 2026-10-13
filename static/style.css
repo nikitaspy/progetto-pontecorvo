@@ -90,6 +90,19 @@ tbody tr:hover { background: #f8fafc; }
 .number { text-align: right; font-variant-numeric: tabular-nums; }
 .strong { font-weight: 800; font-size: 1.05rem; }
 .order-quantity { color: var(--danger); font-weight: 850; font-size: 1.08rem; }
+.selection-column { width: 44px; text-align: center; }
+.selection-column input, .checkbox-label input { width: auto; accent-color: var(--blue); }
+.bulk-toolbar {
+  display: flex; align-items: center; gap: 13px; flex-wrap: wrap; margin: 0 0 18px;
+  padding: 14px; background: var(--sky); border: 1px solid #c8dded; border-radius: 11px;
+}
+.checkbox-label { display: flex; grid-template-columns: none; align-items: center; gap: 8px; white-space: nowrap; }
+.selection-count { color: var(--muted); font-size: .82rem; margin-right: auto; }
+.bulk-order-control { display: flex; align-items: center; gap: 9px; }
+.bulk-order-control label { color: var(--navy); white-space: nowrap; }
+.bulk-order-control input { width: 115px; }
+.individual-order-control { display: flex; justify-content: flex-end; gap: 6px; min-width: 145px; }
+.individual-order-control input { width: 76px; padding: 7px 8px; text-align: right; }
 .empty { color: var(--muted); text-align: center; padding: 28px !important; }
 .text-danger { color: var(--danger); font-weight: 750; }
 .text-success { color: var(--success); font-weight: 750; }
@@ -164,4 +177,7 @@ label small { color: var(--muted); font-weight: 400; line-height: 1.35; }
   .facts div:nth-last-child(-n+3) { border-bottom: 1px solid var(--line); }
   .facts div:nth-last-child(-n+2) { border-bottom: 0; }
   .actions { flex-wrap: wrap; }
+  .bulk-order-control { width: 100%; flex-wrap: wrap; }
+  .bulk-order-control label { width: 100%; }
+  .bulk-order-control input { flex: 1; min-width: 100px; }
 }

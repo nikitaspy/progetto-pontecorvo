@@ -16,10 +16,10 @@ if not exist "requirements.txt" (
 
 powershell -NoProfile -Command "if (Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }" >nul 2>nul
 if not errorlevel 1 (
-  echo ERRORE: un gestionale e' gia' attivo sulla porta 3000.
+  echo ERRORE: la porta 3000 e' gia' utilizzata da un programma.
   echo.
-  echo Chiudi la precedente finestra "Magazzino Cannizzaro" per caricare
-  echo gli aggiornamenti, poi avvia nuovamente questo file.
+  echo Se e' aperta una precedente finestra del gestionale, chiudila per
+  echo caricare gli aggiornamenti, poi avvia nuovamente questo file.
   pause
   exit /b 1
 )
@@ -42,15 +42,15 @@ echo Verifica delle dipendenze...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto :errore
 
-echo Avvio del gestionale versione 1.1.0...
+echo Avvio del gestionale versione 1.2.0...
 echo Non chiudere questa finestra durante l'uso.
-start "" powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 3; Start-Process 'http://localhost:3000/setup'"
+start "" powershell -NoProfile -WindowStyle Hidden -Command "$fine=(Get-Date).AddSeconds(30); while ((Get-Date) -lt $fine) { try { Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:3000/' -TimeoutSec 1 | Out-Null; Start-Process 'http://localhost:3000/'; exit 0 } catch { Start-Sleep -Milliseconds 500 } }"
 ".venv\Scripts\python.exe" app.py
 if errorlevel 1 goto :errore
 exit /b 0
 
 :errore
 echo.
-echo Installazione non riuscita. Controlla i messaggi sopra.
+echo Installazione o avvio non riusciti. Controlla i messaggi sopra.
 pause
 exit /b 1

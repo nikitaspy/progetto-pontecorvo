@@ -1,6 +1,6 @@
 # Magazzino Elettronica — ITIS Cannizzaro Colleferro
 
-Versione corrente: **1.1.0**.
+Versione corrente: **1.2.0**.
 
 Gestionale web per l'inventario dei laboratori di elettronica. Importa automaticamente i 725 componenti dal file Excel fornito al primo avvio e usa un database SQLite locale.
 
@@ -12,6 +12,7 @@ Gestionale web per l'inventario dei laboratori di elettronica. Importa automatic
 - soglia minima e quantità obiettivo configurabili per ogni componente;
 - dashboard per esauriti, sotto soglia e configurazioni incomplete;
 - distinta di riordino calcolata fino alla quantità obiettivo;
+- selezione multipla o totale della distinta con quantità d'ordine comune, mantenendo la modifica per singolo componente;
 - esportazione della distinta in Excel e PDF;
 - account individuali con ruoli amministratore e operatore.
 

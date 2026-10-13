@@ -26,7 +26,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_EXCEL = BASE_DIR / "DATABASE GLOBALE TPS ELETTRONICA.xlsx"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 
 SCHEMA = """
@@ -552,6 +552,76 @@ def register_routes(app: Flask) -> None:
             "reorder.html", items=get_reorder_items(), approaching=get_approaching_items()
         )
 
+    @app.post("/riordino/quantita")
+    @admin_required
+    def reorder_quantities():
+        db = get_db()
+        action = request.form.get("action", "")
+        try:
+            if action == "bulk":
+                raw_ids = request.form.getlist("selected_ids")
+                try:
+                    component_ids = sorted({int(value) for value in raw_ids})
+                except ValueError as exc:
+                    raise ValueError("Selezione dei componenti non valida") from exc
+                if not component_ids:
+                    raise ValueError("Selezionare almeno un componente")
+                order_quantity = positive_int(
+                    request.form.get("bulk_order_quantity"), "Quantità da ordinare"
+                )
+                db.execute("BEGIN IMMEDIATE")
+                components_to_update = components_by_ids(db, component_ids)
+                if len(components_to_update) != len(component_ids):
+                    raise ValueError("Uno o più componenti non sono più presenti nella distinta")
+                validate_order_targets(components_to_update, order_quantity)
+                db.executemany(
+                    """
+                    UPDATE components
+                    SET target_quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    [(order_quantity, component["id"]) for component in components_to_update],
+                )
+                db.commit()
+                flash(
+                    f"Quantità d’ordine impostata a {order_quantity} per {len(component_ids)} componenti.",
+                    "success",
+                )
+            elif action.startswith("single:"):
+                try:
+                    component_id = int(action.split(":", 1)[1])
+                except (IndexError, ValueError) as exc:
+                    raise ValueError("Componente non valido") from exc
+                order_quantity = positive_int(
+                    request.form.get(f"order_quantity_{component_id}"),
+                    "Quantità da ordinare",
+                )
+                db.execute("BEGIN IMMEDIATE")
+                components_to_update = components_by_ids(db, [component_id])
+                if not components_to_update:
+                    raise ValueError("Il componente non è più presente nella distinta")
+                validate_order_targets(components_to_update, order_quantity)
+                component = components_to_update[0]
+                db.execute(
+                    """
+                    UPDATE components
+                    SET target_quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (order_quantity, component_id),
+                )
+                db.commit()
+                flash(
+                    f"Quantità d’ordine di {component['code']} impostata a {order_quantity}.",
+                    "success",
+                )
+            else:
+                raise ValueError("Operazione non valida")
+        except ValueError as error:
+            db.rollback()
+            flash(str(error), "error")
+        return redirect(url_for("reorder_report"))
+
     @app.get("/riordino.xlsx")
     @login_required
     def reorder_excel():
@@ -694,6 +764,40 @@ def get_reorder_items():
         ORDER BY (target_quantity = 0) DESC, category, code
         """
     ).fetchall()
+
+
+def components_by_ids(db: sqlite3.Connection, component_ids: list[int]):
+    if not component_ids:
+        return []
+    placeholders = ",".join("?" for _ in component_ids)
+    return db.execute(
+        f"""
+        SELECT id, code, quantity, reorder_threshold
+        FROM components
+        WHERE id IN ({placeholders})
+          AND (quantity = 0 OR (reorder_threshold > 0 AND quantity <= reorder_threshold))
+        ORDER BY id
+        """,
+        component_ids,
+    ).fetchall()
+
+
+def validate_order_targets(components, order_quantity: int) -> None:
+    invalid = [
+        component
+        for component in components
+        if component["quantity"] + order_quantity < component["reorder_threshold"]
+    ]
+    if invalid:
+        examples = ", ".join(component["code"] for component in invalid[:4])
+        minimum = max(
+            component["reorder_threshold"] - component["quantity"] for component in invalid
+        )
+        suffix = "…" if len(invalid) > 4 else ""
+        raise ValueError(
+            f"Quantità insufficiente per superare la soglia di {examples}{suffix}. "
+            f"Per questa selezione ordinare almeno {minimum} pezzi."
+        )
 
 
 def get_approaching_items():
