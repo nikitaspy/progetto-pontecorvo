@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Etichette QR{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Configurazione mobile</p><h1>Etichette QR</h1><p>Il QR apre la scheda aggiornata del componente e il prelievo rapido.</p></div></div>
+
+<section class="panel qr-settings">
+  <div><h2>Indirizzo raggiungibile dagli smartphone</h2><p>Inserire l’indirizzo HTTPS assegnato al gestionale, oppure l’indirizzo del server nella rete scolastica. Non utilizzare <code>localhost</code>.</p></div>
+  <form method="post" class="url-setting-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Indirizzo del gestionale
+      <input type="url" name="public_base_url" value="{{ public_base_url }}" placeholder="https://magazzino.itis-cannizzaro.it" required>
+    </label>
+    <button type="submit">Salva indirizzo</button>
+  </form>
+  {% if not public_base_url %}<div class="notice warning">Configurare l’indirizzo prima di stampare le etichette.</div>{% elif local_address %}<div class="notice warning"><strong>Questo indirizzo è locale.</strong> Un QR con localhost non può essere aperto dal telefono. Inserire il nome o l’indirizzo IP del server.</div>{% elif insecure_address %}<div class="notice warning"><strong>L’indirizzo funziona nella rete locale, ma non usa HTTPS.</strong> Prima della pubblicazione sul sito della scuola va configurato un certificato HTTPS.</div>{% else %}<div class="notice success">I QR useranno: <strong>{{ public_base_url }}/q/TPS0001</strong></div>{% endif %}
+</section>
+
+<form method="get" class="filters qr-filters">
+  <input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Codice, descrizione o valore">
+  <select name="categoria"><option value="">Tutte le categorie</option>{% for row in categories %}<option value="{{ row['category'] }}" {% if request.args.get('categoria') == row['category'] %}selected{% endif %}>{{ row['category'] }}</option>{% endfor %}</select>
+  <select name="laboratorio"><option value="">Tutti i laboratori</option>{% for row in laboratories %}<option value="{{ row['laboratory'] }}" {% if request.args.get('laboratorio') == row['laboratory'] %}selected{% endif %}>{{ row['laboratory'] }}</option>{% endfor %}</select>
+  <button type="submit">Filtra</button><a class="button secondary" href="{{ url_for('qr_labels') }}">Azzera</a>
+</form>
+
+<form method="post" action="{{ url_for('qr_labels_pdf') }}" id="reorder-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <section class="panel">
+    <div class="bulk-toolbar">
+      <label class="checkbox-label"><input type="checkbox" id="select-all-components"> Seleziona tutti i risultati</label>
+      <span class="selection-count" id="selection-count">0 selezionati</span>
+      <button type="submit" {% if not public_base_url %}disabled{% endif %}>Scarica PDF etichette</button>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th class="selection-column">Sel.</th><th>Codice</th><th>Componente</th><th>Valore</th><th>Ubicazione</th><th>Giacenza</th></tr></thead>
+      <tbody>{% for item in components %}<tr>
+        <td class="selection-column"><input class="component-checkbox" type="checkbox" name="selected_ids" value="{{ item['id'] }}" aria-label="Seleziona {{ item['code'] }}"></td>
+        <td><a href="{{ url_for('component_detail', component_id=item['id']) }}"><strong>{{ item['code'] }}</strong></a></td>
+        <td>{{ item['description'] }}<small class="table-sub">{{ item['category'] }}</small></td>
+        <td>{{ item['value'] or '—' }}</td><td>{{ location_text(item) or '—' }}</td><td class="number strong">{{ item['quantity'] }}</td>
+      </tr>{% else %}<tr><td colspan="6" class="empty">Nessun componente trovato.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+</form>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='reorder.js') }}" defer></script>{% endblock %}

@@ -17,10 +17,9 @@
         <a href="{{ url_for('dashboard') }}">Dashboard</a>
         <a href="{{ url_for('components') }}">Componenti</a>
         <a href="{{ url_for('movement_new') }}">Registra movimento</a>
+        <a href="{{ url_for('movement_batch') }}">Movimento multiplo</a>
         <a href="{{ url_for('movements') }}">Storico</a>
-        <a href="{{ url_for('reorder_report') }}">Distinta</a>
-        <a href="{{ url_for('order_form') }}">Modulo riordino</a>
-        {% if g.user['role'] == 'admin' %}<a href="{{ url_for('users') }}">Utenti</a>{% endif %}
+        {% if g.user['role'] == 'admin' %}<a href="{{ url_for('reorder_report') }}">Distinta</a><a href="{{ url_for('order_form') }}">Modulo riordino</a><a href="{{ url_for('qr_labels') }}">Etichette QR</a><a href="{{ url_for('users') }}">Utenti</a>{% endif %}
       </nav>
       <div class="user-menu">
         <span>{{ g.user['full_name'] }}</span>

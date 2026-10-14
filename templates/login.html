@@ -7,8 +7,8 @@
   <p>Usa il tuo account personale per registrare ogni operazione.</p>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Nome utente<input name="username" autocomplete="username" required autofocus></label>
-    <label>Password<input type="password" name="password" autocomplete="current-password" required></label>
+    <label>Nome utente<input name="username" maxlength="80" autocomplete="username" required autofocus></label>
+    <label>Password<input type="password" name="password" maxlength="256" autocomplete="current-password" required></label>
     <button type="submit">Accedi</button>
   </form>
 </section>

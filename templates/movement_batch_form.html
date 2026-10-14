@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Movimento multiplo{% endblock %}
+{% macro component_select(selected='') -%}
+  <select name="component_id" required aria-label="Componente">
+    <option value="">Seleziona…</option>
+    {% for item in components %}
+      <option value="{{ item['id'] }}" data-stock="{{ item['quantity'] }}" {% if selected|string == item['id']|string %}selected{% endif %}>{{ item['code'] }} — {{ item['description'] }} (disp. {{ item['quantity'] }})</option>
+    {% endfor %}
+  </select>
+{%- endmacro %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">Operazione di magazzino</p>
+    <h1>Prelievo o riconsegna multipli</h1>
+    <p>Inserisci più pezzi dello stesso componente o componenti diversi. Tutte le righe vengono registrate insieme.</p>
+  </div>
+  <a class="button secondary" href="{{ url_for('movement_new') }}">Movimento singolo</a>
+</div>
+
+<form method="post" class="panel batch-movement-form" id="batch-movement-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="operation_id" value="{{ operation_id }}">
+
+  <div class="batch-operation-details">
+    <label>Tipo di operazione
+      <select name="movement_type" id="batch-movement-type" required>
+        <option value="prelievo" {% if request.form.get('movement_type') != 'restituzione' %}selected{% endif %}>Prelievo</option>
+        <option value="restituzione" {% if request.form.get('movement_type') == 'restituzione' %}selected{% endif %}>Riconsegna</option>
+      </select>
+    </label>
+    <div class="batch-operator">
+      <span>Utente che effettua l’operazione</span>
+      <strong>{{ g.user['full_name'] }}</strong>
+    </div>
+  </div>
+
+  <div class="batch-lines-heading">
+    <div>
+      <h2>Componenti e quantità</h2>
+      <p>Ogni riga resta separata nello storico. Puoi ripetere lo stesso componente.</p>
+    </div>
+    <button type="button" class="secondary" id="add-batch-line">+ Aggiungi componente</button>
+  </div>
+
+  <div class="batch-lines" id="batch-lines">
+    {% for line in submitted_lines %}
+      <div class="batch-line">
+        <span class="batch-line-number" aria-hidden="true">{{ loop.index }}</span>
+        <label>Componente
+          {{ component_select(line['component_id']) }}
+        </label>
+        <label class="batch-quantity">Quantità
+          <input type="number" name="quantity" min="1" step="1" inputmode="numeric" value="{{ line['quantity'] }}" required>
+        </label>
+        <button type="button" class="secondary batch-remove-line" aria-label="Rimuovi riga">Rimuovi</button>
+      </div>
+    {% endfor %}
+  </div>
+
+  <template id="batch-line-template">
+    <div class="batch-line">
+      <span class="batch-line-number" aria-hidden="true"></span>
+      <label>Componente
+        {{ component_select() }}
+      </label>
+      <label class="batch-quantity">Quantità
+        <input type="number" name="quantity" min="1" step="1" inputmode="numeric" required>
+      </label>
+      <button type="button" class="secondary batch-remove-line" aria-label="Rimuovi riga">Rimuovi</button>
+    </div>
+  </template>
+
+  <div class="batch-common-details">
+    <label>Destinazione comune (facoltativa)
+      <input name="destination" maxlength="200" value="{{ request.form.get('destination', '') }}" placeholder="Classe, laboratorio o progetto">
+    </label>
+    <label>Note comuni (facoltative)
+      <textarea name="note" rows="2" maxlength="500" placeholder="Esercitazione o altra informazione utile">{{ request.form.get('note', '') }}</textarea>
+    </label>
+  </div>
+
+  <div class="form-actions batch-form-actions">
+    <button type="submit" id="submit-batch-movement">Registra operazione</button>
+    <a class="button secondary" href="{{ url_for('dashboard') }}">Annulla</a>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='batch-movements.js') }}" defer></script>{% endblock %}

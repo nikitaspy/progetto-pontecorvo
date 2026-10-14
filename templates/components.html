@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Componenti{% endblock %}
 {% block content %}
-<div class="page-heading"><div><p class="eyebrow">Inventario</p><h1>Componenti</h1></div><a class="button" href="{{ url_for('movement_new') }}">+ Movimento</a></div>
+<div class="page-heading"><div><p class="eyebrow">Inventario</p><h1>Componenti</h1></div><div class="actions">{% if g.user['role'] == 'admin' %}<a class="button secondary" href="{{ url_for('qr_labels') }}">Etichette QR</a>{% endif %}<a class="button" href="{{ url_for('movement_new') }}">+ Movimento</a></div></div>
 <form method="get" class="filters">
   <input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="Codice, descrizione o valore">
   <select name="categoria"><option value="">Tutte le categorie</option>{% for row in categories %}<option value="{{ row['category'] }}" {% if request.args.get('categoria') == row['category'] %}selected{% endif %}>{{ row['category'] }}</option>{% endfor %}</select>

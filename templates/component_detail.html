@@ -4,7 +4,7 @@
 {% set label, tone = stock_status(component) %}
 <div class="page-heading">
   <div><p class="eyebrow">{{ component['category'] }}</p><h1>{{ component['code'] }} <span class="badge {{ tone }}">{{ label }}</span></h1><p>{{ component['description'] }}</p></div>
-  <div class="actions"><a class="button" href="{{ url_for('movement_new', componente=component['id']) }}">Registra movimento</a>{% if g.user['role'] == 'admin' %}<a class="button secondary" href="{{ url_for('component_edit', component_id=component['id']) }}">Modifica</a>{% endif %}</div>
+  <div class="actions"><a class="button" href="{{ url_for('movement_new', componente=component['id']) }}">Registra movimento</a><a class="button secondary" href="{{ url_for('movement_batch', componente=component['id']) }}">Aggiungi a movimento multiplo</a>{% if g.user['role'] == 'admin' %}<a class="button secondary" href="{{ url_for('component_edit', component_id=component['id']) }}">Modifica</a>{% endif %}</div>
 </div>
 <section class="detail-grid">
   <div class="quantity-card"><span>Giacenza attuale</span><strong>{{ component['quantity'] }}</strong><small>pezzi disponibili</small></div>
@@ -17,11 +17,23 @@
     <div><dt>Scaffale / cassetto</dt><dd>{{ component['shelf'] or '—' }} / {{ component['drawer'] or '—' }}</dd></div>
   </dl>
 </section>
+<section class="panel qr-component-card">
+  <div>
+    <p class="eyebrow">Accesso da smartphone</p>
+    <h2>QR per prelievo rapido</h2>
+    {% if quick_url %}<p>Inquadrando il codice si apre questa scheda con dati e giacenza aggiornati.</p><code>{{ quick_url }}</code>{% elif g.user['role'] == 'admin' %}<p>Configura l’indirizzo raggiungibile dagli smartphone prima di generare il QR.</p>{% else %}<p>Il responsabile deve ancora configurare l’indirizzo dei QR.</p>{% endif %}
+    <div class="actions">
+      <a class="button" href="{{ url_for('quick_component', code=component['code']) }}">Apri prelievo rapido</a>
+      {% if g.user['role'] == 'admin' and quick_url %}<a class="button secondary" href="{{ url_for('component_qr_label_pdf', component_id=component['id']) }}">Stampa etichetta</a>{% elif g.user['role'] == 'admin' %}<a class="button secondary" href="{{ url_for('qr_labels') }}">Configura QR</a>{% endif %}
+    </div>
+  </div>
+  {% if quick_url %}<img src="{{ url_for('component_qr_svg', code=component['code']) }}" alt="QR per {{ component['code'] }}" width="190" height="190">{% endif %}
+</section>
 <section class="panel">
   <div class="panel-heading"><h2>Storico del componente</h2><span>Immutabile</span></div>
   <div class="table-wrap"><table>
     <thead><tr><th>Data</th><th>Operazione</th><th>Variazione</th><th>Giacenza</th><th>Prelevato da / destinatario</th><th>Registrato da</th><th>Note</th></tr></thead>
-    <tbody>{% for movement in movements %}<tr><td>{{ movement['created_at'] }}</td><td>{{ movement['movement_type']|replace('_', ' ')|title }}</td><td class="number {{ 'text-danger' if movement['delta'] < 0 else 'text-success' }}">{{ '%+d'|format(movement['delta']) }}</td><td class="number">{{ movement['balance_after'] }}</td><td>{{ movement['recipient'] or '—' }}</td><td>{{ movement['operator_name'] }}</td><td>{{ movement['note'] or '—' }}</td></tr>{% else %}<tr><td colspan="7" class="empty">Nessun movimento registrato.</td></tr>{% endfor %}</tbody>
+    <tbody>{% for movement in movements %}<tr><td>{{ movement['created_at'] }}</td><td>{{ movement['movement_type']|replace('_', ' ')|title }}{% if movement['batch_id'] %}<small class="table-sub">Operazione multipla #{{ movement['batch_id'] }}</small>{% endif %}</td><td class="number {{ 'text-danger' if movement['delta'] < 0 else 'text-success' }}">{{ '%+d'|format(movement['delta']) }}</td><td class="number">{{ movement['balance_after'] }}</td><td>{{ movement['recipient'] or '—' }}</td><td>{{ movement['operator_name'] }}</td><td>{{ movement['note'] or '—' }}</td></tr>{% else %}<tr><td colspan="7" class="empty">Nessun movimento registrato.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 {% endblock %}

@@ -7,9 +7,9 @@
   <p>Questo sarà il primo account abilitato a configurare componenti e utenti.</p>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Nome e cognome<input name="full_name" required autofocus></label>
-    <label>Nome utente<input name="username" autocomplete="username" required></label>
-    <label>Password <small>(almeno 8 caratteri)</small><input type="password" name="password" minlength="8" autocomplete="new-password" required></label>
+    <label>Nome e cognome<input name="full_name" maxlength="150" required autofocus></label>
+    <label>Nome utente<input name="username" maxlength="80" autocomplete="username" required></label>
+    <label>Password <small>(almeno 8 caratteri)</small><input type="password" name="password" minlength="8" maxlength="256" autocomplete="new-password" required></label>
     <button type="submit">Crea amministratore</button>
   </form>
 </section>

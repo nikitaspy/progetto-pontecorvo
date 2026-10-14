@@ -3,7 +3,10 @@
 {% block content %}
 <div class="page-heading">
   <div><p class="eyebrow">Situazione aggiornata</p><h1>Dashboard magazzino</h1></div>
-  <a class="button" href="{{ url_for('movement_new') }}">+ Registra movimento</a>
+  <div class="actions">
+    <a class="button" href="{{ url_for('movement_batch') }}">+ Movimento multiplo</a>
+    <a class="button secondary" href="{{ url_for('movement_new') }}">Movimento singolo</a>
+  </div>
 </div>
 
 <section class="stats-grid">

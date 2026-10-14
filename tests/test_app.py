@@ -1,8 +1,10 @@
 import sqlite3
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from openpyxl import load_workbook
 from werkzeug.security import generate_password_hash
@@ -40,6 +42,27 @@ class WarehouseTest(unittest.TestCase):
         self.client = self.app.test_client()
         self.client.post("/login", data={"username": "admin", "password": "password-test"})
 
+    def create_operator(
+        self,
+        username: str = "docente",
+        full_name: str = "Prof.ssa Maria Rossi",
+    ) -> int:
+        with self.app.app_context():
+            db = get_db()
+            cursor = db.execute(
+                """INSERT INTO users (username, full_name, password_hash, role)
+                   VALUES (?, ?, ?, 'operatore')""",
+                (username, full_name, generate_password_hash("password-test")),
+            )
+            db.commit()
+            return cursor.lastrowid
+
+    def use_account(self, user_id: int) -> None:
+        with self.client.session_transaction() as session_data:
+            session_data.clear()
+            session_data["user_id"] = user_id
+            session_data["auth_version"] = 1
+
     def tearDown(self):
         self.temp.cleanup()
 
@@ -76,6 +99,321 @@ class WarehouseTest(unittest.TestCase):
         self.assertIn("Giacenza insufficiente".encode(), response.data)
         with self.app.app_context():
             self.assertEqual(get_db().execute("SELECT quantity FROM components").fetchone()[0], 10)
+
+    def test_quick_page_is_public_but_hides_form_and_movement_history(self):
+        self.client.post(
+            "/movimenti/nuovo",
+            data={
+                "component_id": "1",
+                "movement_type": "prelievo",
+                "quantity": "1",
+                "recipient": "Persona riservata",
+                "note": "Nota riservata",
+            },
+        )
+        with self.client.session_transaction() as session_data:
+            session_data.clear()
+
+        public_page = self.client.get("/q/TPS0001")
+
+        self.assertEqual(public_page.status_code, 200)
+        self.assertIn(b"TPS0001", public_page.data)
+        self.assertIn(b"Resistore test", public_page.data)
+        self.assertIn(b">9<", public_page.data)
+        self.assertIn(b"/login?next=/q/TPS0001", public_page.data)
+        self.assertIn(b"Accedi", public_page.data)
+        self.assertNotIn(b"<form", public_page.data)
+        self.assertNotIn(b'name="operation_id"', public_page.data)
+        self.assertNotIn(b"Ultime operazioni", public_page.data)
+        self.assertNotIn(b"Persona riservata", public_page.data)
+        self.assertNotIn(b"Nota riservata", public_page.data)
+        self.assertNotIn(b">Dashboard<", public_page.data)
+
+    def test_anonymous_quick_post_does_not_change_stock_and_requires_login(self):
+        with self.client.session_transaction() as session_data:
+            session_data.clear()
+
+        response = self.client.post(
+            "/q/TPS0001",
+            data={
+                "movement_type": "prelievo",
+                "quantity": "3",
+                "operation_id": "anonymous-attempt-test-0001",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        redirect_url = urlsplit(response.headers["Location"])
+        self.assertEqual(redirect_url.path, "/login")
+        self.assertEqual(
+            parse_qs(redirect_url.query)["next"][0].rstrip("?"),
+            "/q/TPS0001",
+        )
+        with self.app.app_context():
+            db = get_db()
+            self.assertEqual(
+                db.execute("SELECT quantity FROM components WHERE id = 1").fetchone()[0],
+                10,
+            )
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM movements").fetchone()[0], 0)
+
+    def test_login_next_returns_to_scanned_component_and_enables_withdrawal(self):
+        with self.client.session_transaction() as session_data:
+            session_data.clear()
+
+        login = self.client.post(
+            "/login?next=/q/TPS0001",
+            data={"username": "admin", "password": "password-test"},
+        )
+        self.assertEqual(login.status_code, 302)
+        self.assertTrue(login.headers["Location"].endswith("/q/TPS0001"))
+
+        authenticated_page = self.client.get(login.headers["Location"])
+        self.assertEqual(authenticated_page.status_code, 200)
+        self.assertIn("Prelievo rapido".encode(), authenticated_page.data)
+        self.assertIn(b"TPS0001", authenticated_page.data)
+        self.assertIn(b"Resistore test", authenticated_page.data)
+        self.assertIn(b'name="operation_id"', authenticated_page.data)
+        self.assertIn(b">Dashboard<", authenticated_page.data)
+
+    def test_quick_withdrawal_uses_operator_identity_note_and_updates_stock(self):
+        operator_id = self.create_operator()
+        self.use_account(operator_id)
+
+        response = self.client.post(
+            "/q/TPS0001",
+            data={
+                "movement_type": "prelievo",
+                "quantity": "3",
+                "destination": "Classe 4A Elettronica",
+                "note": "Prova amplificatore",
+                "operation_id": "quick-withdrawal-test-0001",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Prelevati 3 pezzi".encode(), response.data)
+        with self.app.app_context():
+            db = get_db()
+            self.assertEqual(
+                db.execute("SELECT quantity FROM components WHERE id = 1").fetchone()[0],
+                7,
+            )
+            movement = db.execute("SELECT * FROM movements").fetchone()
+            self.assertEqual(movement["movement_type"], "prelievo")
+            self.assertEqual(movement["quantity"], 3)
+            self.assertEqual(movement["delta"], -3)
+            self.assertEqual(movement["balance_after"], 7)
+            self.assertEqual(movement["recipient"], "Prof.ssa Maria Rossi")
+            self.assertEqual(
+                movement["note"],
+                "Destinazione: Classe 4A Elettronica — Prova amplificatore",
+            )
+            self.assertEqual(movement["user_id"], operator_id)
+            self.assertEqual(movement["operation_id"], "quick-withdrawal-test-0001")
+
+    def test_quick_withdrawal_operation_id_prevents_double_stock_change(self):
+        operator_id = self.create_operator()
+        self.use_account(operator_id)
+        payload = {
+            "movement_type": "prelievo",
+            "quantity": "4",
+            "destination": "Laboratorio TPS",
+            "operation_id": "same-mobile-operation-0001",
+        }
+
+        first = self.client.post("/q/TPS0001", data=payload)
+        duplicate = self.client.post(
+            "/q/TPS0001", data=payload, follow_redirects=True
+        )
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(duplicate.status_code, 200)
+        self.assertIn("Operazione gi\u00e0 registrata".encode(), duplicate.data)
+        with self.app.app_context():
+            db = get_db()
+            self.assertEqual(
+                db.execute("SELECT quantity FROM components WHERE id = 1").fetchone()[0],
+                6,
+            )
+            self.assertEqual(
+                db.execute(
+                    "SELECT COUNT(*) FROM movements WHERE operation_id = ?",
+                    (payload["operation_id"],),
+                ).fetchone()[0],
+                1,
+            )
+
+    def test_quick_withdrawal_rejects_insufficient_stock(self):
+        operator_id = self.create_operator()
+        self.use_account(operator_id)
+
+        response = self.client.post(
+            "/q/TPS0001",
+            data={
+                "movement_type": "prelievo",
+                "quantity": "11",
+                "operation_id": "insufficient-stock-test-0001",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Giacenza insufficiente: disponibili 10 pezzi".encode(), response.data)
+        with self.app.app_context():
+            db = get_db()
+            self.assertEqual(
+                db.execute("SELECT quantity FROM components WHERE id = 1").fetchone()[0],
+                10,
+            )
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM movements").fetchone()[0], 0)
+
+    def test_operator_cannot_record_loads_or_stock_adjustments(self):
+        operator_id = self.create_operator()
+        self.use_account(operator_id)
+
+        page = self.client.get("/movimenti/nuovo")
+        self.assertNotIn(b'<option value="carico">', page.data)
+        self.assertNotIn(b'<option value="rettifica_carico">', page.data)
+        self.assertNotIn(b'<option value="rettifica_scarico">', page.data)
+        for movement_type in ("carico", "rettifica_carico", "rettifica_scarico"):
+            with self.subTest(movement_type=movement_type):
+                response = self.client.post(
+                    "/movimenti/nuovo",
+                    data={
+                        "component_id": "1",
+                        "movement_type": movement_type,
+                        "quantity": "5",
+                        "operation_id": f"forbidden-{movement_type}-0001",
+                    },
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(
+                    "I docenti possono registrare solo prelievi e restituzioni".encode(),
+                    response.data,
+                )
+
+        with self.app.app_context():
+            db = get_db()
+            self.assertEqual(
+                db.execute("SELECT quantity FROM components WHERE id = 1").fetchone()[0],
+                10,
+            )
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM movements").fetchone()[0], 0)
+
+    def test_operator_can_record_withdrawals_and_returns_from_generic_form(self):
+        operator_id = self.create_operator()
+        self.use_account(operator_id)
+
+        withdrawal = self.client.post(
+            "/movimenti/nuovo",
+            data={
+                "component_id": "1",
+                "movement_type": "prelievo",
+                "quantity": "2",
+                "recipient": "Classe 4A",
+                "operation_id": "generic-operator-withdrawal-0001",
+            },
+        )
+        returned = self.client.post(
+            "/movimenti/nuovo",
+            data={
+                "component_id": "1",
+                "movement_type": "restituzione",
+                "quantity": "1",
+                "recipient": "Classe 4A",
+                "operation_id": "generic-operator-return-0001",
+            },
+        )
+
+        self.assertEqual(withdrawal.status_code, 302)
+        self.assertEqual(returned.status_code, 302)
+        with self.app.app_context():
+            db = get_db()
+            self.assertEqual(
+                db.execute("SELECT quantity FROM components WHERE id = 1").fetchone()[0],
+                9,
+            )
+            movements = db.execute(
+                "SELECT movement_type, delta, user_id FROM movements ORDER BY id"
+            ).fetchall()
+            self.assertEqual(
+                [(row["movement_type"], row["delta"], row["user_id"]) for row in movements],
+                [
+                    ("prelievo", -2, operator_id),
+                    ("restituzione", 1, operator_id),
+                ],
+            )
+
+    def test_qr_url_configuration_validates_input_and_requires_admin(self):
+        invalid = self.client.post(
+            "/etichette-qr",
+            data={"public_base_url": "https://utente:password@example.edu"},
+            follow_redirects=True,
+        )
+        self.assertEqual(invalid.status_code, 200)
+        self.assertIn("Inserire un indirizzo completo".encode(), invalid.data)
+        with self.app.app_context():
+            self.assertIsNone(
+                get_db().execute(
+                    "SELECT value FROM app_settings WHERE key = 'public_base_url'"
+                ).fetchone()
+            )
+
+        valid = self.client.post(
+            "/etichette-qr",
+            data={"public_base_url": "https://magazzino.itis.example/"},
+            follow_redirects=True,
+        )
+        self.assertEqual(valid.status_code, 200)
+        self.assertIn("Indirizzo dei QR salvato".encode(), valid.data)
+        self.assertIn(
+            b"https://magazzino.itis.example/q/TPS0001",
+            valid.data,
+        )
+        with self.app.app_context():
+            saved_url = get_db().execute(
+                "SELECT value FROM app_settings WHERE key = 'public_base_url'"
+            ).fetchone()[0]
+            self.assertEqual(saved_url, "https://magazzino.itis.example")
+
+        operator_id = self.create_operator()
+        self.use_account(operator_id)
+        self.assertEqual(self.client.get("/etichette-qr").status_code, 403)
+        forbidden = self.client.post(
+            "/etichette-qr",
+            data={"public_base_url": "https://changed.example"},
+        )
+        self.assertEqual(forbidden.status_code, 403)
+        with self.app.app_context():
+            saved_url = get_db().execute(
+                "SELECT value FROM app_settings WHERE key = 'public_base_url'"
+            ).fetchone()[0]
+            self.assertEqual(saved_url, "https://magazzino.itis.example")
+
+    def test_qr_svg_and_label_pdfs_are_valid_downloads(self):
+        self.client.post(
+            "/etichette-qr",
+            data={"public_base_url": "https://magazzino.itis.example"},
+        )
+
+        svg = self.client.get("/qr/TPS0001.svg")
+        self.assertEqual(svg.status_code, 200)
+        self.assertEqual(svg.mimetype, "image/svg+xml")
+        root = ET.fromstring(svg.data)
+        self.assertEqual(root.tag.rsplit("}", 1)[-1], "svg")
+        self.assertTrue(root.findall(".//{http://www.w3.org/2000/svg}path"))
+
+        labels = self.client.post(
+            "/etichette-qr.pdf", data={"selected_ids": ["1"]}
+        )
+        self.assertEqual(labels.status_code, 200)
+        self.assertEqual(labels.mimetype, "application/pdf")
+        self.assertTrue(labels.data.startswith(b"%PDF"))
+        self.assertGreater(len(labels.data), 1000)
+        self.assertIn("attachment", labels.headers["Content-Disposition"])
+
+        single_label = self.client.get("/componenti/1/etichetta.pdf")
+        self.assertEqual(single_label.status_code, 200)
+        self.assertEqual(single_label.mimetype, "application/pdf")
+        self.assertTrue(single_label.data.startswith(b"%PDF"))
 
     def test_reorder_report_uses_target_minus_current_stock(self):
         self.client.post(
@@ -294,6 +632,7 @@ class WarehouseTest(unittest.TestCase):
             db.commit()
         with self.client.session_transaction() as session_data:
             session_data["user_id"] = operator_id
+            session_data["auth_version"] = 1
 
         page = self.client.get("/modulo-riordino")
         self.assertEqual(page.status_code, 200)
@@ -430,6 +769,66 @@ class WarehouseTest(unittest.TestCase):
                        WHERE key = 'reorder_lines_migrated_from_targets_v1'"""
                 ).fetchone()
             )
+
+    def test_legacy_movement_schema_adds_operation_id_without_losing_history(self):
+        legacy_path = str(Path(self.temp.name) / "legacy.db")
+        legacy_db = sqlite3.connect(legacy_path)
+        legacy_db.execute(
+            """
+            CREATE TABLE movements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                component_id INTEGER NOT NULL,
+                movement_type TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                delta INTEGER NOT NULL,
+                balance_after INTEGER NOT NULL,
+                recipient TEXT,
+                note TEXT,
+                user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        legacy_db.execute(
+            """INSERT INTO movements
+               (component_id, movement_type, quantity, delta, balance_after,
+                recipient, note, user_id)
+               VALUES (7, 'prelievo', 2, -2, 8, 'Prof. Legacy', 'Storico', 3)"""
+        )
+        legacy_db.commit()
+        legacy_db.close()
+
+        legacy_config = {
+            "TESTING": True,
+            "DATABASE": legacy_path,
+            "EXCEL_SOURCE": str(Path(self.temp.name) / "missing-legacy.xlsx"),
+            "CSRF_ENABLED": False,
+            "SECRET_KEY": "legacy-test",
+        }
+        legacy_app = create_app(legacy_config)
+        with legacy_app.app_context():
+            db = get_db()
+            columns = {
+                row["name"] for row in db.execute("PRAGMA table_info(movements)")
+            }
+            self.assertIn("operation_id", columns)
+            movement = db.execute("SELECT * FROM movements WHERE id = 1").fetchone()
+            self.assertEqual(movement["recipient"], "Prof. Legacy")
+            self.assertEqual(movement["balance_after"], 8)
+            self.assertIsNone(movement["operation_id"])
+            indexes = {
+                row["name"] for row in db.execute("PRAGMA index_list(movements)")
+            }
+            self.assertIn("idx_movements_operation_id", indexes)
+
+        second_start = create_app(legacy_config)
+        with second_start.app_context():
+            db = get_db()
+            columns = [
+                row["name"] for row in db.execute("PRAGMA table_info(movements)")
+            ]
+            self.assertEqual(columns.count("operation_id"), 1)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM movements").fetchone()[0], 1)
 
     def test_movement_history_is_immutable_in_database(self):
         self.client.post(

@@ -1,16 +1,17 @@
 {% extends 'base.html' %}
 {% block title %}Nuovo movimento{% endblock %}
 {% block content %}
-<div class="page-heading"><div><p class="eyebrow">Operazione di magazzino</p><h1>Registra movimento</h1><p>Ogni operazione sarà associata al tuo account e resterà nello storico.</p></div></div>
+<div class="page-heading"><div><p class="eyebrow">Operazione di magazzino</p><h1>Registra movimento</h1><p>Ogni operazione sarà associata al tuo account e resterà nello storico.</p></div><a class="button secondary" href="{{ url_for('movement_batch') }}">Più componenti</a></div>
 <form method="post" class="panel form-grid movement-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="operation_id" value="{{ operation_id }}">
   <label class="wide">Componente
     <select name="component_id" required autofocus><option value="">Seleziona…</option>{% for item in components %}<option value="{{ item['id'] }}" {% if selected_id == item['id'] %}selected{% endif %}>{{ item['code'] }} — {{ item['description'] }} (disp. {{ item['quantity'] }})</option>{% endfor %}</select>
   </label>
-  <label>Tipo di movimento<select name="movement_type" required><option value="prelievo">Prelievo</option><option value="restituzione">Restituzione</option><option value="carico">Carico / acquisto</option><option value="rettifica_carico">Rettifica in aumento</option><option value="rettifica_scarico">Rettifica in diminuzione</option></select></label>
+  <label>Tipo di movimento<select name="movement_type" required><option value="prelievo">Prelievo</option><option value="restituzione">Restituzione</option>{% if g.user['role'] == 'admin' %}<option value="carico">Carico / acquisto</option><option value="rettifica_carico">Rettifica in aumento</option><option value="rettifica_scarico">Rettifica in diminuzione</option>{% endif %}</select></label>
   <label>Quantità<input type="number" name="quantity" min="1" required></label>
-  <label class="wide">Chi preleva / destinatario<input name="recipient" placeholder="Nome docente, classe o laboratorio"><small>Obbligatorio per i prelievi.</small></label>
-  <label class="wide">Note<textarea name="note" rows="3" placeholder="Progetto, esercitazione, riferimento ordine…"></textarea></label>
+  <label class="wide">Chi preleva / destinatario<input name="recipient" maxlength="200" placeholder="Nome docente, classe o laboratorio"><small>Obbligatorio per i prelievi.</small></label>
+  <label class="wide">Note<textarea name="note" rows="3" maxlength="500" placeholder="Progetto, esercitazione, riferimento ordine…"></textarea></label>
   <div class="form-actions wide"><button type="submit">Registra movimento</button><a class="button secondary" href="{{ url_for('dashboard') }}">Annulla</a></div>
 </form>
 {% endblock %}

@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}Prelievo rapido · {{ component['code'] }}{% endblock %}
+{% block content %}
+{% set label, tone = stock_status(component) %}
+<div class="quick-shell">
+  <div class="quick-heading">
+    <div><p class="eyebrow">Prelievo rapido</p><h1>{{ component['code'] }}</h1><p>{{ component['description'] }}</p></div>
+    <span class="badge {{ tone }}">{{ label }}</span>
+  </div>
+
+  <section class="quick-stock-card">
+    <span>Disponibili adesso</span>
+    <strong>{{ component['quantity'] }}</strong>
+    <small>pezzi</small>
+  </section>
+
+  <dl class="quick-facts">
+    <div><dt>Categoria</dt><dd>{{ component['category'] or '—' }}</dd></div>
+    <div><dt>Valore</dt><dd>{{ component['value'] or '—' }}</dd></div>
+    <div class="wide"><dt>Ubicazione</dt><dd>{{ location_text(component) or '—' }}</dd></div>
+  </dl>
+
+  {% if g.user %}
+  <form method="post" class="panel quick-form" id="quick-movement-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="operation_id" value="{{ operation_id }}">
+    <div class="quantity-picker">
+      <span class="field-title">Quantità</span>
+      <div class="stepper">
+        <button type="button" class="step-button" data-step="-1" aria-label="Diminuisci quantità">−</button>
+        <input type="number" id="quick-quantity" name="quantity" min="1" step="1" value="1" inputmode="numeric" required>
+        <button type="button" class="step-button" data-step="1" aria-label="Aumenta quantità">+</button>
+      </div>
+      <div class="quantity-presets" aria-label="Quantità rapide">
+        {% for amount in (1, 2, 5, 10) %}<button type="button" class="button secondary" data-quantity="{{ amount }}">{{ amount }}</button>{% endfor %}
+      </div>
+    </div>
+    <label>Classe, laboratorio o progetto <input name="destination" maxlength="120" placeholder="Facoltativo, es. 4A Elettronica"></label>
+    <details class="quick-details"><summary>Aggiungi una nota</summary><textarea name="note" rows="2" maxlength="500" placeholder="Esercitazione o altra informazione utile"></textarea></details>
+    <div class="quick-actions">
+      <button type="submit" name="movement_type" value="prelievo" class="quick-primary" data-action-label="Preleva" {% if component['quantity'] == 0 %}disabled{% endif %}>
+        {% if component['quantity'] == 0 %}Componente esaurito{% else %}Preleva 1 pezzo{% endif %}
+      </button>
+      <button type="submit" name="movement_type" value="restituzione" class="button secondary">Registra restituzione</button>
+    </div>
+  </form>
+  <a class="button secondary quick-batch-link" href="{{ url_for('movement_batch', componente=component['id']) }}">Preleva o riconsegna più componenti</a>
+
+  <section class="panel quick-recent">
+    <div class="panel-heading"><h2>Ultime operazioni</h2><a href="{{ url_for('component_detail', component_id=component['id']) }}">Scheda completa</a></div>
+    {% for movement in recent %}<div class="activity"><span class="delta {{ 'negative' if movement['delta'] < 0 else 'positive' }}">{{ '%+d'|format(movement['delta']) }}</span><div><strong>{{ movement['movement_type']|replace('_', ' ')|title }}</strong><small>{{ movement['operator_name'] }} · giacenza {{ movement['balance_after'] }} · {{ movement['created_at'] }}</small></div></div>{% else %}<p class="empty">Nessuna operazione registrata.</p>{% endfor %}
+  </section>
+  {% else %}
+  <section class="panel public-component-access">
+    <h2>Accedi per prelevare o riconsegnare</h2>
+    <p>La scheda e la giacenza sono consultabili da tutti. Per aggiornare il magazzino devi accedere con un account registrato.</p>
+    <a class="button quick-login-button" href="{{ url_for('login', next=url_for('quick_component', code=component['code'])) }}">Accedi per prelevare</a>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}{% if g.user %}<script src="{{ url_for('static', filename='quick.js') }}" defer></script>{% endif %}{% endblock %}

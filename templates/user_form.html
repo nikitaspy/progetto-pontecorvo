@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Modifica utente{% endblock %}
+{% block content %}
+{% set selected_role = request.form.get('role', user['role']) %}
+{% set is_active = request.form.get('active') == '1' if request.method == 'POST' else user['active'] %}
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">Amministrazione utenti</p>
+    <h1>Modifica {{ user['full_name'] }}</h1>
+    <p>Aggiorna i dati di accesso, il ruolo e lo stato dell’account.</p>
+  </div>
+</div>
+
+<form method="post" class="panel form-grid user-edit-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label>Nome e cognome
+    <input name="full_name" maxlength="150" value="{{ request.form.get('full_name', user['full_name']) }}" required>
+  </label>
+  <label>Nome utente
+    <input name="username" maxlength="80" value="{{ request.form.get('username', user['username']) }}" autocomplete="off" required>
+  </label>
+  <label>Nuova password
+    <input type="password" name="password" minlength="8" maxlength="256" autocomplete="new-password">
+    <small>Lascia vuoto per mantenere la password attuale.</small>
+  </label>
+
+  {% if user['id'] == g.user['id'] %}
+    <label>Ruolo
+      <input value="Amministratore" disabled>
+      <input type="hidden" name="role" value="admin">
+      <small>Non puoi rimuovere i privilegi dall’account che stai usando.</small>
+    </label>
+    <div class="account-state-field">
+      <span class="field-label">Stato account</span>
+      <span class="badge success">Attivo</span>
+      <input type="hidden" name="active" value="1">
+      <small>Non puoi disattivare l’account che stai usando.</small>
+    </div>
+  {% else %}
+    <label>Ruolo
+      <select name="role">
+        <option value="operatore" {{ 'selected' if selected_role == 'operatore' else '' }}>Docente / operatore</option>
+        <option value="admin" {{ 'selected' if selected_role == 'admin' else '' }}>Amministratore</option>
+      </select>
+    </label>
+    <label class="checkbox-label account-active-checkbox">
+      <input type="checkbox" name="active" value="1" {{ 'checked' if is_active else '' }}>
+      Account attivo
+    </label>
+  {% endif %}
+
+  <div class="form-actions wide">
+    <button type="submit">Salva modifiche</button>
+    <a class="button secondary" href="{{ url_for('users') }}">Annulla</a>
+  </div>
+</form>
+{% endblock %}
